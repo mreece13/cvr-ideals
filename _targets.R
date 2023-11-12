@@ -4,7 +4,7 @@ source("R/functions_data.R")
 source("R/functions_fit.R")
 source("R/functions_plot.R")
 
-options("brms.threads" = NULL)
+options("brms.threads" = 12)
 options("mc.cores" = 4)
 options("brms.backend" = "cmdstanr")
 options("future" = FALSE)
@@ -16,8 +16,8 @@ tar_config_set(seconds_meta_append=15,
                seconds_reporter=0.5
                )
 list(
-  tar_target(cvr_path, "~/Dropbox (MIT)/Research/hidden-partisanship/data/cvr_qa_main/"),
-  tar_target(data_colorado, get_data_partisans(path = cvr_path, st = "COLORADO", n=150)),
+  tar_target(cvr_path, "~/cvrs/data/cvr_qa_main/"),
+  tar_target(data_colorado, get_data_partisans(path = cvr_path, st = "COLORADO", n=25000)),
   tar_target(data_colorado_adams, filter_byCounty(data=data_colorado, county="ADAMS")),
   tar_target(randos_colorado, pick_random_voters(data_colorado, 15)),
   tar_target(randos_colorado_adams, pick_random_voters(data_colorado_adams, 10)),
