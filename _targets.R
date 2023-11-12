@@ -44,3 +44,6 @@ list(
                              "Partisans, Binomial, 2PL -- Adams County, Colorado" = fit_2pl_binomial_partisans_colorado_adams,
                              "Partisans, Binomial, Rasch -- Colorado" = fit_rasch_binomial_partisans_colorado)))
 )
+
+# run the pipeline
+tar_make()
