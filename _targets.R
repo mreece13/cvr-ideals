@@ -17,7 +17,7 @@ tar_config_set(seconds_meta_append=15,
                )
 list(
   tar_target(cvr_path, "~/Dropbox (MIT)/Research/hidden-partisanship/data/cvr_qa_main/"),
-  tar_target(data_colorado, get_data_partisans(path = cvr_path, st = "COLORADO", n=250)),
+  tar_target(data_colorado, get_data_partisans(path = cvr_path, st = "COLORADO", n=150)),
   tar_target(data_colorado_adams, filter_byCounty(data=data_colorado, county="ADAMS")),
   tar_target(randos_colorado, pick_random_voters(data_colorado, 15)),
   tar_target(randos_colorado_adams, pick_random_voters(data_colorado_adams, 10)),
@@ -32,10 +32,15 @@ list(
   tar_target(plot_rasch_binomial_partisans_colorado_adams_trace, plot_trace(fit_rasch_binomial_partisans_colorado_adams)),
   tar_target(plot_2pl_binomial_partisans_colorado_adams_trace, plot_trace(fit_2pl_binomial_partisans_colorado_adams)),
   tar_target(plot_rasch_binomial_partisans_colorado_trace, plot_trace(fit_rasch_binomial_partisans_colorado)),
-  tar_target(plot_rasch_binomial_partisans_colorado_adams_voters, plot_voters(fit_rasch_binomial_partisans_colorado_adams)),
-  tar_target(plot_2pl_binomial_partisans_colorado_adams_voters, plot_voters(fit_2pl_binomial_partisans_colorado_adams)),
-  tar_target(plot_rasch_binomial_partisans_colorado_voters, plot_voters(fit_rasch_binomial_partisans_colorado)),
-  tar_target(plot_rasch_binomial_partisans_colorado_adams_offices, plot_offices(fit_rasch_binomial_partisans_colorado_adams)),
+  tar_target(plot_rasch_binomial_partisans_colorado_adams_voters, 
+             plot_voters(fit_rasch_binomial_partisans_colorado_adams, randos_colorado_adams, twopl = FALSE)),
+  tar_target(plot_2pl_binomial_partisans_colorado_adams_voters, 
+             plot_voters(fit_2pl_binomial_partisans_colorado_adams, randos_colorado_adams, twopl = TRUE)),
+  tar_target(plot_rasch_binomial_partisans_colorado_voters, 
+             plot_voters(fit_rasch_binomial_partisans_colorado, randos_colorado, twopl = FALSE)),
   tar_target(plot_2pl_binomial_partisans_colorado_adams_offices, plot_offices(fit_2pl_binomial_partisans_colorado_adams)),
-  tar_target(plot_rasch_binomial_partisans_colorado_offices, plot_offices(fit_rasch_binomial_partisans_colorado))
+  tar_target(plot_rhat_comparison, 
+             plot_rhats(list("Partisans, Binomial, Rasch -- Adams County, Colorado" = fit_rasch_binomial_partisans_colorado_adams, 
+                             "Partisans, Binomial, 2PL -- Adams County, Colorado" = fit_2pl_binomial_partisans_colorado_adams,
+                             "Partisans, Binomial, Rasch -- Colorado" = fit_rasch_binomial_partisans_colorado)))
 )

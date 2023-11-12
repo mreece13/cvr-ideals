@@ -6,32 +6,50 @@ plot_trace <- function(fit){
 
 plot_rhats <- function(fits){
   
-  rhats <- tibble(fit = fits) |> 
+  tibble(fit = fits, fit_name = names(fits)) |> 
     mutate(rhat = map(fit, ~ select(summarise_draws(.x), rhat))) |> 
-    unnest(cols = rhat)
-  
-  rhats |> 
-    ggplot(aes(x = rhat, y = fit)) +
+    select(-fit) |> 
+    unnest(cols = rhat) |> 
+    ggplot(aes(x = rhat)) +
     geom_dots() + 
     geom_vline(xintercept = 1, color = "blue", linetype = "dashed") +
-    scale_x_continuous(labels = scales::label_number(accuracy = 0.001)) +
+    scale_y_continuous(labels = NULL) +
+    facet_wrap(~ fit_name, scales = "free_x", ncol=2) +
     labs(x = expression(hat(R)), y = "") +
     theme_bw()
   
 }
 
-plot_voters <- function(fit, randos){
+plot_voters <- function(fit, randos, twopl){
   
-  fit |> 
-    spread_draws(r_cvr_id[cvr_id, dimension]) |> 
-    mutate(cvr_id = as.character(cvr_id)) |> 
-    inner_join(randos) |>
-    mutate(r_cvr_id = if_else(r_cvr_id > quantile(r_cvr_id, 0.99, na.rm = TRUE), NA, r_cvr_id)) |> 
-    mutate(r_cvr_id = if_else(r_cvr_id < quantile(r_cvr_id, 0.01, na.rm = TRUE), NA, r_cvr_id)) |> 
-    ggplot(aes(y = cvr_id, x = r_cvr_id)) +
-    geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
-    stat_halfeye() +
-    theme_bw()
+  if (twopl){
+    plot <- fit |> 
+      spread_draws(r_cvr_id__eta[cvr_id, dimension]) |> 
+      mutate(cvr_id = as.character(cvr_id)) |> 
+      inner_join(randos) |>
+      mutate(r_cvr_id__eta = if_else(r_cvr_id__eta > quantile(r_cvr_id__eta, 0.99, na.rm = TRUE), NA, r_cvr_id__eta)) |> 
+      mutate(r_cvr_id__eta = if_else(r_cvr_id__eta < quantile(r_cvr_id__eta, 0.01, na.rm = TRUE), NA, r_cvr_id__eta)) |> 
+      ggplot(aes(y = cvr_id, x = r_cvr_id__eta)) +
+      geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
+      stat_halfeye() +
+      labs(x = "Ideal Point Estimate", y = "Voter ID") +
+      theme_bw()
+    
+  } else {
+    plot <- fit |> 
+      spread_draws(r_cvr_id[cvr_id, dimension]) |> 
+      mutate(cvr_id = as.character(cvr_id)) |> 
+      inner_join(randos) |>
+      mutate(r_cvr_id = if_else(r_cvr_id > quantile(r_cvr_id, 0.99, na.rm = TRUE), NA, r_cvr_id)) |> 
+      mutate(r_cvr_id = if_else(r_cvr_id < quantile(r_cvr_id, 0.01, na.rm = TRUE), NA, r_cvr_id)) |> 
+      ggplot(aes(y = cvr_id, x = r_cvr_id)) +
+      geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
+      stat_halfeye() +
+      labs(x = "Ideal Point Estimate", y = "Voter ID") +
+      theme_bw()
+  }
+  
+  return(plot)
   
 }
 
