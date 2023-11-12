@@ -10,3 +10,9 @@
 /fits/
 /figs/
 /writing/
+!.gitignore
+!meta
+meta/*
+!meta/meta
+_targets/
+hill_tausanovitch/
