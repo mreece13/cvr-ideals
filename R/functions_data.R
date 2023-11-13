@@ -69,9 +69,7 @@ get_data_partisans <- function(path, st = "all", num){
 }
 
 filter_byCounty <- function(data, county){
-  
   filter(data, county_name == county)
-  
 }
 
 pick_random_voters <- function(data, n){

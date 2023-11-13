@@ -1,4 +1,5 @@
 library(targets)
+library(tarchetypes)
 
 source("R/functions_data.R")
 source("R/functions_fit.R")
@@ -29,9 +30,9 @@ list(
              format = "qs"),
   tar_target(fit_rasch_binomial_partisans_colorado,
              fit_rasch(data_colorado, binomial = TRUE)),
-  tar_target(plot_rasch_binomial_partisans_colorado_adams_trace, plot_trace(fit_rasch_binomial_partisans_colorado_adams)),
-  tar_target(plot_2pl_binomial_partisans_colorado_adams_trace, plot_trace(fit_2pl_binomial_partisans_colorado_adams)),
-  tar_target(plot_rasch_binomial_partisans_colorado_trace, plot_trace(fit_rasch_binomial_partisans_colorado)),
+  # tar_target(plot_rasch_binomial_partisans_colorado_adams_trace, plot_trace(fit_rasch_binomial_partisans_colorado_adams)),
+  # tar_target(plot_2pl_binomial_partisans_colorado_adams_trace, plot_trace(fit_2pl_binomial_partisans_colorado_adams)),
+  # tar_target(plot_rasch_binomial_partisans_colorado_trace, plot_trace(fit_rasch_binomial_partisans_colorado)),
   tar_target(plot_rasch_binomial_partisans_colorado_adams_voters, 
              plot_voters(fit_rasch_binomial_partisans_colorado_adams, randos_colorado_adams, twopl = FALSE)),
   tar_target(plot_2pl_binomial_partisans_colorado_adams_voters, 
@@ -42,5 +43,6 @@ list(
   tar_target(plot_rhat_comparison, 
              plot_rhats(list("Partisans, Binomial, Rasch -- Adams County, Colorado" = fit_rasch_binomial_partisans_colorado_adams, 
                              "Partisans, Binomial, 2PL -- Adams County, Colorado" = fit_2pl_binomial_partisans_colorado_adams,
-                             "Partisans, Binomial, Rasch -- Colorado" = fit_rasch_binomial_partisans_colorado)))
+                             "Partisans, Binomial, Rasch -- Colorado" = fit_rasch_binomial_partisans_colorado))),
+  tar_quarto(ideals_paper, "ideals_paper.qmd", quiet = FALSE)
 )

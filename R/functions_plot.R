@@ -1,7 +1,7 @@
 #R/functions_plot.R
 
 plot_trace <- function(fit){
-  mcmc_trace(fit, regex_pars = "^b|^sd_")
+  mcmc_trace(fit, regex_pars = "^b_")
 }
 
 plot_rhats <- function(fits){
