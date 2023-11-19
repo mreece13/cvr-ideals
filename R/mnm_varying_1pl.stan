@@ -65,9 +65,7 @@ model {
   beta ~ std_normal();
   delta ~ std_normal();
   
-  profile("threaded_likelihood"){
-    int grainsize = 1;
+  int grainsize = 1;
 
-    target += reduce_sum(partial_sum, votes, grainsize, alpha, beta, delta, candidates, eligibility);
-  }
+  target += reduce_sum(partial_sum, votes, grainsize, alpha, beta, delta, candidates, eligibility);
 }
