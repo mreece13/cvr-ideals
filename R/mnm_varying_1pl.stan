@@ -61,18 +61,13 @@ parameters {
 
 model {
   // Priors
-  profile("priors"){
-    alpha ~ std_normal();
-    beta ~ std_normal();
-    delta ~ std_normal();
-  }
+  alpha ~ std_normal();
+  beta ~ std_normal();
+  delta ~ std_normal();
   
-  if (parallelize == 1){
-    profile("threaded_likelihood"){
-      int grainsize = 1;
-  
-      target += reduce_sum(partial_sum, votes, grainsize, alpha, beta, delta, candidates, eligibility);
-    }
+  profile("threaded_likelihood"){
+    int grainsize = 1;
+
+    target += reduce_sum(partial_sum, votes, grainsize, alpha, beta, delta, candidates, eligibility);
   }
 }
-

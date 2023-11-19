@@ -65,44 +65,38 @@ parameters {
 
 model {
   // Priors
-  profile("priors"){
-    mu_beta ~ cauchy(0, 5);
-    alpha ~ std_normal(); // set to N(0, 1) for identification
-    beta ~ normal(0, sigma_beta);
-    gamma ~ lognormal(0, sigma_gamma);
-    sigma_beta ~ cauchy(0, 5);
-    sigma_gamma ~ cauchy(0, 5);
-  }
+  mu_beta ~ cauchy(0, 5);
+  alpha ~ std_normal(); // set to N(0, 1) for identification
+  beta ~ normal(0, sigma_beta);
+  gamma ~ lognormal(0, sigma_gamma);
+  sigma_beta ~ cauchy(0, 5);
+  sigma_gamma ~ cauchy(0, 5);
   
   if (parallelize == 0){
-    profile("serial_likelihood"){
-      // Likelihood
-      for (j in 1:J) {
-        for (k in 1:K) {
-          if (eligibility[j, k] == 1) { // Check if the voter is eligible for the race
-            vector[C] logits = rep_vector(-1e8, C); // Initialize logits with large negative values
-            int reference = 1;
-            for (c in 1:C) {
-              if (candidates[k, c] == 1) { // check if candidate could be voted for in this race
-                if (reference == 1){ // set alpha and beta to 0 if reference
-                  logits[c] = 0;
-                  reference = 0;
-                } else {
-                  logits[c] = gamma[k] .* (alpha[j] - (beta[k] + mu_beta)); // 2PL IRT model
-                }
-              } 
-            }
-            target += categorical_logit_lpmf(votes[j, k] | logits);
+    // Likelihood
+    for (j in 1:J) {
+      for (k in 1:K) {
+        if (eligibility[j, k] == 1) { // Check if the voter is eligible for the race
+          vector[C] logits = rep_vector(-1e8, C); // Initialize logits with large negative values
+          int reference = 1;
+          for (c in 1:C) {
+            if (candidates[k, c] == 1) { // check if candidate could be voted for in this race
+              if (reference == 1){ // set alpha and beta to 0 if reference
+                logits[c] = 0;
+                reference = 0;
+              } else {
+                logits[c] = gamma[k] .* (alpha[j] - (beta[k] + mu_beta)); // 2PL IRT model
+              }
+            } 
           }
+          target += categorical_logit_lpmf(votes[j, k] | logits);
         }
       }
     }
   }
   if (parallelize == 1){
-    profile("threaded_likelihood"){
-      int grainsize = 1;
-  
-      target += reduce_sum(partial_sum, votes, grainsize, alpha, beta, gamma, mu_beta, candidates, eligibility);
-    }
+    int grainsize = 1;
+
+    target += reduce_sum(partial_sum, votes, grainsize, alpha, beta, gamma, mu_beta, candidates, eligibility);
   }
 }
