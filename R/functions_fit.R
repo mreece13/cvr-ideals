@@ -5,8 +5,6 @@
 
 fit_binomial <- function(data, type){
   
-  form <- 0
-  
   if (type == "rasch"){
     if (n_distinct(data$county_name) > 1){
       form <- bf(choice_rep ~ county_name + (1 | office/district) + (1 | cvr_id))
@@ -27,10 +25,6 @@ fit_binomial <- function(data, type){
                  logalpha ~ 1 + (1 | office/district),
                  nl = TRUE)
     }
-  }
-  
-  if (form == 0){
-    return("Misspecified Type")
   }
   
   brm(
