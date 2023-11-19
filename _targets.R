@@ -51,6 +51,6 @@ list(
                              "Partisans, Binomial, 2PL -- Adams County, Colorado" = fit_2pl_binomial_partisans_colorado_adams,
                              "Partisans, Binomial, Rasch -- Colorado" = fit_rasch_binomial_partisans_colorado,
                              "Partisans, Categorical, Rasch -- Adams County, Colorado" = fit_rasch_categorical_colorado, 
-                             "Partisans, Categorical, 2PL -- Adams County, Colorado" = fit_2pl_categorical_colorado))),
-  tar_quarto(ideals_paper, "ideals_paper.qmd", quiet = FALSE)
+                             "Partisans, Categorical, 2PL -- Adams County, Colorado" = fit_2pl_categorical_colorado)))
+  # tar_quarto(ideals_paper, "ideals_paper.qmd", quiet = FALSE)
 )
