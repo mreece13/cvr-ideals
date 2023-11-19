@@ -70,7 +70,8 @@ get_data <- function(path, st, partisan_only = FALSE, num = 1e9){
     collect() |> 
     mutate(district = if_else(office %in% c("US HOUSE", "STATE SENATE", "STATE HOUSE"), 
                               str_remove(district, str_c(", ", county_name)),
-                              district))
+                              district)) |> 
+    mutate(race = str_c(office, district, sep = " - "))
 }
 
 filter_byCounty <- function(data, county){

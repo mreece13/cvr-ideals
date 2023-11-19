@@ -27,19 +27,26 @@ fit_rasch <- function(data, binomial = TRUE){
       cpp_options = list(stan_threads = TRUE)
     )
     
+    df <- data |> 
+      # propositions are not quite right
+      mutate(candidate = case_when(
+        str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
+        TRUE ~ candidate
+      ))
+    
     # Assign unique IDs to races and candidates
-    races <- data |> 
+    races <- df |> 
       distinct(race) |> 
       arrange(race) |> 
       mutate(race_id = row_number())
     
-    candidates <- data |> 
+    candidates <- df |> 
       distinct(candidate) |> 
       arrange(candidate) |> 
       mutate(candidate_id = row_number())
     
     # Create the candidate availability matrix
-    candidate_availability <- data |> 
+    candidate_availability <- df |> 
       summarize(available = n() > 0, .by = c(race, candidate)) |> 
       left_join(races, by = "race") |> 
       left_join(candidates, by = "candidate") |> 
@@ -53,12 +60,23 @@ fit_rasch <- function(data, binomial = TRUE){
       as.matrix()
     
     # Join back to the original data
-    data <- data |> 
+    df <- df |> 
       left_join(races, by = "race") |> 
       left_join(candidates, by = "candidate")
     
+    # some races are not classified perfectly in districts rn so they would show up as list-columns (bad)
+    bad_races <- df |> 
+      count(cvr_id, race_id) |> 
+      filter(n > 1) |> 
+      distinct(race_id) |> 
+      pull(race_id)
+    
+    df <- df |> 
+      filter(!(race_id %in% bad_races)) |>
+      drop_na(race_id, candidate_id)
+    
     # Create the votes matrix
-    votes_matrix <- data |> 
+    votes_matrix <- df |> 
       select(cvr_id, race_id, candidate_id) |> 
       arrange(race_id, candidate_id) |>
       pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |> 
@@ -76,12 +94,13 @@ fit_rasch <- function(data, binomial = TRUE){
     
     # Prepare data for Stan
     stan_data <- list(
-      J = n_distinct(data$cvr_id),
+      J = n_distinct(df$cvr_id),
       K = max(races$race_id),
       C = max(candidates$candidate_id),
       candidates = candidate_availability,
       eligibility = eligibility_matrix,
-      votes = votes_matrix
+      votes = votes_matrix,
+      parallelize = 1
     )
     
     fit <- model$sample(
@@ -91,7 +110,7 @@ fit_rasch <- function(data, binomial = TRUE){
       iter_sampling = 1000,
       seed = 02139,
       parallel_chains = 4,
-      threads_per_chain = 16 
+      threads_per_chain = 16
     )
   }
   
@@ -131,19 +150,26 @@ fit_2pl <- function(data, binomial = TRUE){
       cpp_options = list(stan_threads = TRUE)
     )
     
+    df <- data |> 
+      # propositions are not quite right
+      mutate(candidate = case_when(
+        str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
+        TRUE ~ candidate
+      ))
+    
     # Assign unique IDs to races and candidates
-    races <- data |> 
+    races <- df |> 
       distinct(race) |> 
       arrange(race) |> 
       mutate(race_id = row_number())
     
-    candidates <- data |> 
+    candidates <- df |> 
       distinct(candidate) |> 
       arrange(candidate) |> 
       mutate(candidate_id = row_number())
     
     # Create the candidate availability matrix
-    candidate_availability <- data |> 
+    candidate_availability <- df |> 
       summarize(available = n() > 0, .by = c(race, candidate)) |> 
       left_join(races, by = "race") |> 
       left_join(candidates, by = "candidate") |> 
@@ -157,12 +183,23 @@ fit_2pl <- function(data, binomial = TRUE){
       as.matrix()
     
     # Join back to the original data
-    data <- data |> 
+    df <- df |> 
       left_join(races, by = "race") |> 
       left_join(candidates, by = "candidate")
     
+    # some races are not classified perfectly in districts rn so they would show up as list-columns (bad)
+    bad_races <- df |> 
+      count(cvr_id, race_id) |> 
+      filter(n > 1) |> 
+      distinct(race_id) |> 
+      pull(race_id)
+    
+    df <- df |> 
+      filter(!(race_id %in% bad_races)) |>
+      drop_na(race_id, candidate_id)
+    
     # Create the votes matrix
-    votes_matrix <- data |> 
+    votes_matrix <- df |> 
       select(cvr_id, race_id, candidate_id) |> 
       arrange(race_id, candidate_id) |>
       pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |> 
@@ -180,12 +217,13 @@ fit_2pl <- function(data, binomial = TRUE){
     
     # Prepare data for Stan
     stan_data <- list(
-      J = n_distinct(data$cvr_id),
+      J = n_distinct(df$cvr_id),
       K = max(races$race_id),
       C = max(candidates$candidate_id),
       candidates = candidate_availability,
       eligibility = eligibility_matrix,
-      votes = votes_matrix
+      votes = votes_matrix,
+      parallelize = 1
     )
     
     fit <- model$sample(

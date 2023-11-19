@@ -10,15 +10,16 @@ options("mc.cores" = 4)
 options("brms.backend" = "cmdstanr")
 options("future" = FALSE)
 
-tar_option_set(packages = c("tidyverse", "brms", "arrow", "tidybayes", "bayesplot"),
+tar_option_set(packages = c("tidyverse", "brms", "arrow", "tidybayes", "bayesplot", "cmdstanr"),
                memory = "transient", 
                garbage_collection = TRUE)
 tar_config_set(seconds_meta_append=15, 
                seconds_reporter=0.5
                )
 list(
-  tar_target(cvr_path, "~/cvrs/data/cvr_qa_main/"),
-  tar_target(data_base, get_data(path = path, st = "COLORADO", num=25000)),
+  # tar_target(cvr_path, "~/cvrs/data/cvr_qa_main/"),
+  tar_target(cvr_path, "~/Dropbox (MIT)/Research/hidden-partisanship/data/cvr_qa_main/"),
+  tar_target(data_base, get_data(path = cvr_path, st = "COLORADO", num=25000)),
   tar_target(data_colorado, get_data(path = cvr_path, st = "COLORADO", partisan_only = TRUE, num=25000)),
   tar_target(data_colorado_adams, filter_byCounty(data=data_colorado, county="ADAMS")),
   tar_target(data_base_adams, filter_byCounty(data=data_base, county="ADAMS")),

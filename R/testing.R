@@ -135,8 +135,8 @@ base_data <- open_dataset("~/Dropbox (MIT)/Research/hidden-partisanship/data/cvr
   select(-magnitude) |> 
   mutate(race = str_c(office, district, sep = " - ")) |> 
   # drop some judges that are mis-classified right now
-  filter(!(race %in% c("COUNTY JUDGE - ADAMS", "COURT OF APPEALS JUDGE - STATEWIDE", 
-                       "DISTRICT COURT JUDGE - 17, ADAMS", "SUPREME COURT JUSTICE - STATEWIDE"))) |> 
+  # filter(!(race %in% c("COUNTY JUDGE - ADAMS", "COURT OF APPEALS JUDGE - STATEWIDE", 
+  #                      "DISTRICT COURT JUDGE - 17, ADAMS", "SUPREME COURT JUSTICE - STATEWIDE"))) |> 
   # propositions are not quite right
   mutate(candidate = case_when(
     str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
@@ -200,9 +200,16 @@ candidate_availability <- base_data |>
   mutate(across(everything(), as.numeric)) |> 
   as.matrix()
 
+bad_races <- data |> 
+  count(cvr_id, race_id) |> 
+  filter(n > 1) |> 
+  distinct(race_id) |> 
+  pull(race_id)
+
 # Create the votes matrix
 votes_matrix <- data |> 
   select(cvr_id, race_id, candidate_id) |> 
+  filter(!(race_id %in% bad_races)) |> 
   arrange(race_id, candidate_id) |>
   pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |> 
   select(-cvr_id)
@@ -224,47 +231,47 @@ data_varying <- list(
   votes = votes_matrix
 )
 
-model_varying <- cmdstan_model("R/mnm_varying.stan")
-
-fit_varying <- model_varying$sample(
-  data = data_varying,
-  chains = 4,
-  iter_warmup = 1000,
-  iter_sampling = 1000,
-  seed = 02139,
-  parallel_chains = 4,
-  adapt_delta = 0.95,
-  max_treedepth = 15
-)
-
-fit_varying$save_object(file = "fits/mnm_varying.rds")
-
-fit_varying <- readRDS("fits/mnm_varying.rds")
-
-fit_varying |> 
-  spread_draws(gamma[race_id]) |> 
-  mutate(gamma = log(gamma)) |> 
-  left_join(races, join_by(race_id)) |> 
-  ggplot(aes(x = gamma, y = race)) +
-  stat_pointinterval() +
-  # scale_x_continuous(limits = c(-5, 5)) +
-  theme_bw()
-
-fit_varying |> 
-  spread_draws(adjusted_beta[race_id]) |> 
-  left_join(races, join_by(race_id)) |> 
-  ggplot(aes(x = adjusted_beta, y = race)) +
-  stat_pointinterval() +
-  # scale_x_continuous(limits = c(-5, 5)) +
-  theme_bw()
-
-fit_varying |> 
-  spread_draws(alpha[cvr_id]) |> 
-  filter(cvr_id < 10) |> 
-  ggplot(aes(x = alpha, y = as.character(cvr_id), )) +
-  stat_halfeye() +
-  # scale_x_continuous(limits = c(-5, 5)) +
-  theme_bw()
+# model_varying <- cmdstan_model("R/mnm_varying.stan")
+# 
+# fit_varying <- model_varying$sample(
+#   data = data_varying,
+#   chains = 4,
+#   iter_warmup = 1000,
+#   iter_sampling = 1000,
+#   seed = 02139,
+#   parallel_chains = 4,
+#   adapt_delta = 0.95,
+#   max_treedepth = 15
+# )
+# 
+# fit_varying$save_object(file = "fits/mnm_varying.rds")
+# 
+# fit_varying <- readRDS("fits/mnm_varying.rds")
+# 
+# fit_varying |> 
+#   spread_draws(gamma[race_id]) |> 
+#   mutate(gamma = log(gamma)) |> 
+#   left_join(races, join_by(race_id)) |> 
+#   ggplot(aes(x = gamma, y = race)) +
+#   stat_pointinterval() +
+#   # scale_x_continuous(limits = c(-5, 5)) +
+#   theme_bw()
+# 
+# fit_varying |> 
+#   spread_draws(adjusted_beta[race_id]) |> 
+#   left_join(races, join_by(race_id)) |> 
+#   ggplot(aes(x = adjusted_beta, y = race)) +
+#   stat_pointinterval() +
+#   # scale_x_continuous(limits = c(-5, 5)) +
+#   theme_bw()
+# 
+# fit_varying |> 
+#   spread_draws(alpha[cvr_id]) |> 
+#   filter(cvr_id < 10) |> 
+#   ggplot(aes(x = alpha, y = as.character(cvr_id), )) +
+#   stat_halfeye() +
+#   # scale_x_continuous(limits = c(-5, 5)) +
+#   theme_bw()
 
 ## 1PL attempt
 
@@ -279,35 +286,35 @@ fit_varying_1pl <- model_varying_1pl$sample(
   parallel_chains = 4
 )
 
-fit_varying_1pl$save_object(file = "fits/mnm_varying_1pl.rds")
-
-ids <- data |> 
-  select(cvr_id, race_id, candidate_id) |> 
-  arrange(race_id, candidate_id) |> 
-  distinct(cvr_id) |> 
-  mutate(voter_id = row_number())
-
-fit_varying_1pl |> 
-  spread_draws(alpha[voter_id]) |> 
-  filter(voter_id < 10) |> 
-  left_join(ids) |> 
-  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
-  stat_halfeye() +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  theme_bw()
-
-reference_cats <- data |> 
-  arrange(race_id, candidate_id) |> 
-  distinct(race, candidate)
-
-fit_varying_1pl |> 
-  spread_draws(beta[race_id]) |> 
-  ungroup() |> 
-  left_join(races, join_by(race_id)) |> 
-  ggplot(aes(x = beta, y = race)) +
-  stat_halfeye() +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  theme_bw()
+# fit_varying_1pl$save_object(file = "fits/mnm_varying_1pl.rds")
+# 
+# ids <- data |> 
+#   select(cvr_id, race_id, candidate_id) |> 
+#   arrange(race_id, candidate_id) |> 
+#   distinct(cvr_id) |> 
+#   mutate(voter_id = row_number())
+# 
+# fit_varying_1pl |> 
+#   spread_draws(alpha[voter_id]) |> 
+#   filter(voter_id < 10) |> 
+#   left_join(ids) |> 
+#   ggplot(aes(x = alpha, y = as.character(cvr_id))) +
+#   stat_halfeye() +
+#   geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+#   theme_bw()
+# 
+# reference_cats <- data |> 
+#   arrange(race_id, candidate_id) |> 
+#   distinct(race, candidate)
+# 
+# fit_varying_1pl |> 
+#   spread_draws(beta[race_id]) |> 
+#   ungroup() |> 
+#   left_join(races, join_by(race_id)) |> 
+#   ggplot(aes(x = beta, y = race)) +
+#   stat_halfeye() +
+#   geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+#   theme_bw()
 
 ## New 2PL attempt
 
@@ -324,80 +331,80 @@ fit_varying_2pl <- model_varying_2pl$sample(
 
 fit_varying_2pl$save_object(file = "fits/mnm_varying_2pl.rds")
 
-ids <- data |> 
-  select(cvr_id, race_id, candidate_id, party_detailed) |> 
-  arrange(race_id, candidate_id) |> 
-  distinct(cvr_id) |> 
-  mutate(voter_id = row_number())
-
-pres_votes <- data |> 
-  select(cvr_id, race, candidate, party_detailed) |> 
-  filter(race == "US PRESIDENT - STATEWIDE") |> 
-  select(cvr_id, candidate)
-
-fit_varying_2pl |> 
-  spread_draws(alpha[voter_id]) |> 
-  filter(voter_id %% 10 == 0) |> 
-  left_join(ids) |> 
-  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
-  stat_halfeye() +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  theme_bw()
-
-fit_varying_2pl |> 
-  spread_draws(alpha[voter_id]) |> 
-  left_join(ids) |> 
-  left_join(pres_votes, by = "cvr_id") |> 
-  filter(candidate %in% c("DONALD J TRUMP", "JOSEPH R BIDEN")) |> 
-  ggplot(aes(x = alpha, color = candidate, fill = candidate)) +
-  stat_halfeye(alpha = 0.8) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
-  labs(x = "Latent Dimension 1", y = "") +
-  scale_y_continuous(breaks = NULL) +
-  theme_medsl() +
-  scale_fill_discrete(type = c("#F6573E", "#3791FF")) +
-  scale_color_discrete(type = c("#F6573E", "#3791FF")) +
-  theme(
-    legend.position = "right",
-    legend.direction = "vertical",
-  )
-
-reference_cats <- data |> 
-  arrange(race_id, candidate_id) |> 
-  distinct(race, candidate)
-
-fit_varying_2pl |> 
-  spread_draws(beta[race_id]) |> 
-  ungroup() |> 
-  left_join(races, join_by(race_id)) |> 
-  ggplot(aes(x = beta, y = race)) +
-  stat_halfeye() +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  theme_bw()
-
-fit_varying_2pl |> 
-  spread_draws(gamma[race_id]) |> 
-  ungroup() |> 
-  left_join(races, join_by(race_id)) |> 
-  ggplot(aes(x = gamma, y = race)) +
-  stat_halfeye() +
-  scale_x_continuous(limits = c(0, 10)) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  theme_bw()
-
-fits <- c("2PL" = fit_varying_2pl)
-
-tibble(fit = fits, fit_name = names(fits)) |> 
-  mutate(rhat = map(fit, ~ select(summarise_draws(.x), rhat))) |> 
-  select(-fit) |> 
-  unnest(cols = rhat) |> 
-  ggplot(aes(x = rhat)) +
-  geom_dots() + 
-  geom_vline(xintercept = 1, color = "blue", linetype = "dashed") +
-  scale_y_continuous(labels = NULL) +
-  facet_wrap(~ fit_name, scales = "free_x", ncol=2) +
-  labs(x = expression(hat(R)), y = "") +
-  theme_bw()
+# ids <- data |> 
+#   select(cvr_id, race_id, candidate_id, party_detailed) |> 
+#   arrange(race_id, candidate_id) |> 
+#   distinct(cvr_id) |> 
+#   mutate(voter_id = row_number())
+# 
+# pres_votes <- data |> 
+#   select(cvr_id, race, candidate, party_detailed) |> 
+#   filter(race == "US PRESIDENT - STATEWIDE") |> 
+#   select(cvr_id, candidate)
+# 
+# fit_varying_2pl |> 
+#   spread_draws(alpha[voter_id]) |> 
+#   filter(voter_id %% 10 == 0) |> 
+#   left_join(ids) |> 
+#   ggplot(aes(x = alpha, y = as.character(cvr_id))) +
+#   stat_halfeye() +
+#   geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+#   theme_bw()
+# 
+# fit_varying_2pl |> 
+#   spread_draws(alpha[voter_id]) |> 
+#   left_join(ids) |> 
+#   left_join(pres_votes, by = "cvr_id") |> 
+#   filter(candidate %in% c("DONALD J TRUMP", "JOSEPH R BIDEN")) |> 
+#   ggplot(aes(x = alpha, color = candidate, fill = candidate)) +
+#   stat_halfeye(alpha = 0.8) +
+#   geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+#   labs(x = "Latent Dimension 1", y = "") +
+#   scale_y_continuous(breaks = NULL) +
+#   theme_medsl() +
+#   scale_fill_discrete(type = c("#F6573E", "#3791FF")) +
+#   scale_color_discrete(type = c("#F6573E", "#3791FF")) +
+#   theme(
+#     legend.position = "right",
+#     legend.direction = "vertical",
+#   )
+# 
+# reference_cats <- data |> 
+#   arrange(race_id, candidate_id) |> 
+#   distinct(race, candidate)
+# 
+# fit_varying_2pl |> 
+#   spread_draws(beta[race_id]) |> 
+#   ungroup() |> 
+#   left_join(races, join_by(race_id)) |> 
+#   ggplot(aes(x = beta, y = race)) +
+#   stat_halfeye() +
+#   geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+#   theme_bw()
+# 
+# fit_varying_2pl |> 
+#   spread_draws(gamma[race_id]) |> 
+#   ungroup() |> 
+#   left_join(races, join_by(race_id)) |> 
+#   ggplot(aes(x = gamma, y = race)) +
+#   stat_halfeye() +
+#   scale_x_continuous(limits = c(0, 10)) +
+#   geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+#   theme_bw()
+# 
+# fits <- c("2PL" = fit_varying_2pl)
+# 
+# tibble(fit = fits, fit_name = names(fits)) |> 
+#   mutate(rhat = map(fit, ~ select(summarise_draws(.x), rhat))) |> 
+#   select(-fit) |> 
+#   unnest(cols = rhat) |> 
+#   ggplot(aes(x = rhat)) +
+#   geom_dots() + 
+#   geom_vline(xintercept = 1, color = "blue", linetype = "dashed") +
+#   scale_y_continuous(labels = NULL) +
+#   facet_wrap(~ fit_name, scales = "free_x", ncol=2) +
+#   labs(x = expression(hat(R)), y = "") +
+#   theme_bw()
 
 ## Optimized 2PL
 
