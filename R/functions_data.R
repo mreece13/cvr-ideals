@@ -81,3 +81,85 @@ filter_byCounty <- function(data, county){
 pick_random_voters <- function(data, n){
   slice_sample(distinct(data, cvr_id), n=n)
 }
+
+get_stan_data <- function(data){
+  
+  df <- data |> 
+    # propositions are not quite right
+    mutate(candidate = case_when(
+      str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
+      TRUE ~ candidate
+    ))
+  
+  # Assign unique IDs to races and candidates
+  races <- df |> 
+    distinct(race) |> 
+    arrange(race) |> 
+    mutate(race_id = row_number())
+  
+  candidates <- df |> 
+    distinct(candidate) |> 
+    arrange(candidate) |> 
+    mutate(candidate_id = row_number())
+  
+  # Create the candidate availability matrix
+  candidate_availability <- df |> 
+    summarize(available = n() > 0, .by = c(race, candidate)) |> 
+    left_join(races, by = "race") |> 
+    left_join(candidates, by = "candidate") |> 
+    select(-race, -candidate) |> 
+    collect() |> 
+    drop_na(race_id, candidate_id) |> 
+    complete(race_id, candidate_id, fill = list(available = FALSE)) |> 
+    pivot_wider(names_from = candidate_id, values_from = available) |> 
+    select(-race_id) |> 
+    mutate(across(everything(), as.numeric)) |> 
+    as.matrix()
+  
+  # Join back to the original data
+  df <- df |> 
+    left_join(races, by = "race") |> 
+    left_join(candidates, by = "candidate")
+  
+  # some races are not classified perfectly in districts rn so they would show up as list-columns (bad)
+  bad_races <- df |> 
+    count(cvr_id, race_id) |> 
+    filter(n > 1) |> 
+    distinct(race_id) |> 
+    pull(race_id)
+  
+  df <- df |> 
+    filter(!(race_id %in% bad_races)) |>
+    drop_na(race_id, candidate_id)
+  
+  # Create the votes matrix
+  votes_matrix <- df |> 
+    select(cvr_id, race_id, candidate_id) |> 
+    arrange(race_id, candidate_id) |>
+    pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |> 
+    select(-cvr_id)
+  
+  missing <- setdiff(races$race_id, colnames(votes_matrix)) |> as.character()
+  
+  if (length(missing) > 0){
+    votes_matrix[, missing] <- 0
+    votes_matrix <- relocate(votes_matrix, all_of(as.character(races$race_id))) |> 
+      as.matrix()
+  }
+  
+  eligibility_matrix <- ifelse(votes_matrix > 0, 1, 0)
+  
+  # Prepare data for Stan
+  stan_data <- list(
+    J = n_distinct(df$cvr_id),
+    K = max(races$race_id),
+    C = max(candidates$candidate_id),
+    candidates = candidate_availability,
+    eligibility = eligibility_matrix,
+    votes = votes_matrix,
+    parallelize = 1
+  )
+  
+  return(stan_data)
+  
+}
