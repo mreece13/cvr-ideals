@@ -54,7 +54,7 @@ compile_model <- function(model, type){
   return(m)
 }
 
-fit_stan <- function(model, stan_data){
+fit_stan <- function(model, stan_data, file_name){
   
   fit <- model$sample(
     data = stan_data,
@@ -66,6 +66,9 @@ fit_stan <- function(model, stan_data){
     threads_per_chain = 16
   )
   
-  return(fit)
+  path <- str_c("fits/", file_name, ".rds")
   
+  fit$save_object(path)
+  
+  path
 }

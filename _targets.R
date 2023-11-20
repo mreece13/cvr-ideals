@@ -17,8 +17,8 @@ tar_config_set(seconds_meta_append=15,
                seconds_reporter=0.5
                )
 list(
-  tar_target(cvr_path, "~/cvrs/data/cvr_qa_main/"),
-  # tar_target(cvr_path, "~/Dropbox (MIT)/Research/hidden-partisanship/data/cvr_qa_main/"),
+  # tar_target(cvr_path, "~/cvrs/data/cvr_qa_main/"),
+  tar_target(cvr_path, "~/Dropbox (MIT)/Research/hidden-partisanship/data/cvr_qa_main/"),
   tar_target(data_base, get_data(path = cvr_path, st = "COLORADO", num=25000)),
   tar_target(data_colorado, get_data(path = cvr_path, st = "COLORADO", partisan_only = TRUE, num=25000)),
   tar_target(data_colorado_adams, filter_byCounty(data=data_colorado, county="ADAMS")),
@@ -39,8 +39,8 @@ list(
   tar_target(stan_2pl_code, "R/mnm_varying_2pl_optimized.stan", format = "file"),
   tar_target(stan_rasch, compile_model(stan_rasch_code, type = "rasch"), format = "qs"),
   tar_target(stan_2pl, compile_model(stan_2pl_code, type = "2pl"), format = "qs"),
-  tar_target(fit_rasch_categorical_colorado, fit_stan(stan_rasch, stan_data)),
-  tar_target(fit_2pl_categorical_colorado, fit_stan(stan_2pl, stan_data)),
+  tar_target(fit_rasch_categorical_colorado, fit_stan(stan_rasch, stan_data, "categorical_rasch")),
+  tar_target(fit_2pl_categorical_colorado, fit_stan(stan_2pl, stan_data, "categorical_2pl")),
   tar_target(plot_rasch_binomial_partisans_colorado_adams_voters, 
              plot_voters(fit_rasch_binomial_partisans_colorado_adams, randos_colorado_adams, twopl = FALSE)),
   tar_target(plot_2pl_binomial_partisans_colorado_adams_voters, 
@@ -52,7 +52,7 @@ list(
              plot_rhats(list("Partisans, Binomial, Rasch -- Adams County, Colorado" = fit_rasch_binomial_partisans_colorado_adams, 
                              "Partisans, Binomial, 2PL -- Adams County, Colorado" = fit_2pl_binomial_partisans_colorado_adams,
                              "Partisans, Binomial, Rasch -- Colorado" = fit_rasch_binomial_partisans_colorado,
-                             "Partisans, Categorical, Rasch -- Adams County, Colorado" = fit_rasch_categorical_colorado, 
-                             "Partisans, Categorical, 2PL -- Adams County, Colorado" = fit_2pl_categorical_colorado)))
+                             "Partisans, Categorical, Rasch -- Adams County, Colorado" = readRDS(fit_rasch_categorical_colorado), 
+                             "Partisans, Categorical, 2PL -- Adams County, Colorado" = readRDS(fit_2pl_categorical_colorado))))
   # tar_quarto(ideals_paper, "ideals_paper.qmd", quiet = FALSE)
 )
