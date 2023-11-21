@@ -127,11 +127,15 @@ partial_schema <- schema(
   field("party_detailed", string())
 )
 
-base_data <- open_dataset("~/Dropbox (MIT)/Research/hidden-partisanship/data/cvr_qa_main/",
+counties <- open_dataset("~/Dropbox (MIT)/Research/hidden-partisanship/data/cvr_qa_main/",
                           partitioning = "state",
                           schema = partial_schema,
                           format = "parquet") |> 
-  filter(state == "COLORADO", magnitude == "1", county_name == "ADAMS", !is.na(office), !is.na(district)) |> 
+  filter(state == "COLORADO", !is.na(office), !is.na(district)) |> 
+  distinct(county_name, cvr_id) |> 
+  count(county_name) |> 
+  collect()
+
   select(-magnitude) |> 
   mutate(race = str_c(office, district, sep = " - ")) |> 
   # drop some judges that are mis-classified right now

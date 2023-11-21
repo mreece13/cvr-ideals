@@ -40,23 +40,12 @@ fit_binomial <- function(data, type){
   
 }
 
-compile_model <- function(model, type){
-  
-  if (type == "rasch"){
-    m <- cmdstan_model("R/mnm_varying_1pl.stan", compile = FALSE)
-    m$compile(cpp_options = list(stan_threads = TRUE))
-  }
-  if (type == "2pl"){
-    m <- cmdstan_model("R/mnm_varying_2pl_optimized.stan", compile = FALSE)
-    m$compile(cpp_options = list(stan_threads = TRUE))
-  }
-  
-  return(m)
-}
-
 fit_stan <- function(model, stan_data, file_name){
   
-  fit <- model$sample(
+  m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = FALSE)
+  m$compile(cpp_options = list(stan_threads = TRUE))
+  
+  fit <- m$sample(
     data = stan_data,
     chains = 4,
     iter_warmup = 1000,
