@@ -10,9 +10,16 @@ options("mc.cores" = 4)
 options("brms.backend" = "cmdstanr")
 options("future" = FALSE)
 
-tar_option_set(packages = c("tidyverse", "brms", "arrow", "tidybayes", "bayesplot", "cmdstanr"),
+tar_option_set(packages = c("tidyverse", "brms", "arrow", "tidybayes", "bayesplot", "cmdstanr", "googleCloudStorageR"),
                memory = "transient", 
-               garbage_collection = TRUE)
+               garbage_collection = TRUE,
+               repository = "gcp",
+               resources = tar_resources(
+                 gcp = tar_resources_gcp(
+                   bucket = "cvr-ideals", 
+                   prefix = "ideals")
+                 )
+)
 tar_config_set(seconds_meta_append=15, 
                seconds_reporter=0.5
                )
