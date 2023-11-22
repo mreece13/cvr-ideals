@@ -6,7 +6,7 @@ date-format: long
 bibliography: "references.bib"
 execute: 
   echo: false
-  cache: true
+  cache: false
 format: 
   html:
     toc: true
@@ -26,9 +26,21 @@ library(tidyverse)
 
 ```
 
+# Introduction
+
+How representative is the government of its constituents? This topic has been repeatedly probed in the political science literature [e.g., @caneswrone_out_2002; @bafumi_leapfrog_2010; @kirkland_representation_2022]. However, those analyses use aggregated measures of voter preferences or survey-based estimates of ideology rather than the actual votes of individuals [for an exception, see @lewis2001]. Survey-based estimates suffer from two related flaws. First, like all surveys, issues of sampling bias, response bias, their temporal relationship with the actual election, and other such problems prevents them from being perfect representations of vote choice. Second, surveys are often unable to ask voters about the full set of choices on their ballot, mostly given space constraints and the difficulty that arises from determining which exact races a voter was eligible to vote in. Aggregated data overcomes these two issues by using the results from an election and being able to look at the results in every race on the ballot. However, with aggregated data we lose the richness of being able to study the same voter up and down the ballot. What if voters are splitting their tickets, vacillate randomly between candidates, or otherwise act in such a way that aggregate measures would miss?
+
+To avoid all of these problems, I use an original data set of "cast vote records" (CVRs) that reveal anonymous, individual voter choices in each race in the 2020 election. Since these are true votes by people, they do not suffer from the same problems as surveys, and because I can uniquely identify the same voter up and down the ballot, issues of aggregation do not apply here. The downside of using CVRs is that they reveal very little additional information about the voter. There are no names, no voter IDs, no demographic information, or anything that might violate the privacy of a voter. The only thing that could be done would be to attempt to parse the precinct of the voter (which is only available for some counties) and back out aggregate level demographic information on the voters. For this paper, I set this process aside and only work with the anonymized data.
+
+Using this data, I estimate the latent traits of voters that are best described by their vote choices in the election. In previous research, the first dimension of this latent trait is often assumed to be the ideology of the voter, so I refer to this latent trait as ideology henceforth [@clinton2004; @lewis2001; @bonica2014; @heckman1996].
+
+\[talk more about representational model goals\]
+
 # Data
 
-I remove all uncontested races, and all races where a voter could select more than one candidate (although see @sec-extensions). In addition, I subset my data to a random selection of 25,000 voters in Colorado, to make computation tractable. Colorado has some of the best coverage of any state in the data -- nearly every county is represented and the state already has a decent partisan and demographic mix so that I can think of it as a good benchmark for how the model would perform in every other state.
+My data is limited to the 2020 election and a non-random set of states/counties. Nevertheless, it still contains almost 1 billion choices in elections at all levels of government and in localities of all kinds from all over the country. See @fig-map for the full distribution of counties. I remove all uncontested races, and all races where a voter could select more than one candidate (although see @sec-potential-extensions). In addition, I subset my data to a random selection of 25,000 voters in Colorado, to make computation tractable. Colorado has some of the best coverage of any state in the data -- nearly every county is represented and the state already has a decent partisan and demographic mix so that I can think of it as a good benchmark for how the model would perform in every other state.
+
+![Cast Vote Record Distribution](writing/images/county_map2.jpeg){#fig-map}
 
 # Model Specification
 
@@ -52,16 +64,16 @@ bf(choice_rep ~ county_name + (1 | office/district) + (1 | cvr_id))
 ```{r}
 #| label: fig-binomial-rhats
 #| fig-cap: Comparison of $\hat{R}$ values
+#| cache: true
 
 tar_read(plot_rhat_comparison)
 ```
 
-Rasch models treat each race as equally important in determining the ideal point of a voter, so really we can only look at those ideal points. I randomly select 10 voters and plot their estimated ideal points in @fig-binomial-rasch-voters-adams.
+Rasch models treat each race as equally important in determining the ideal point of a voter, so I only look at those ideal points. I randomly select 10 voters and plot their estimated ideal points in @fig-binomial-rasch-voters-adams. These estimates generally make sense; voter "224789" chose entirely Republican candidates except for two races whereas voter "415" and "48066" voted straight Democrat and straight Republican ballots, respectively. The variation in outcome in "224789" lets me better identify their location on the first dimension, which is why the distribution of the posterior is tighter for these voters.
 
 ```{r}
 #| label: fig-binomial-rasch-voters-adams
-#| fig-cap: Ideal Point Estimations for Adams County, Colorado
-#| fig-subcap: Binomial, Partisans, Rasch
+#| fig-cap: Ideal Points for Partisans, Binomial, Rasch -- Adams County, Colorado
 #| warning: false
 
 tar_read(plot_rasch_binomial_partisans_colorado_adams_voters)
