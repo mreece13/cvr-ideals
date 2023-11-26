@@ -1,4 +1,6 @@
 #### TESTING FILE ONLY
+rm(list=ls())
+gc()
 
 library(tidyverse)
 library(cmdstanr)
@@ -69,25 +71,25 @@ candidate_availability <- base |>
   mutate(across(everything(), as.numeric)) |> 
   as.matrix()
 
-# some races are not classified perfectly in districts rn so they would show up as list-columns (bad)
-bad_races <- base |> 
+df <- base |> 
   left_join(races, by = "race") |> 
-  left_join(candidates, by = "candidate") |> 
+  left_join(candidates, by = "candidate")
+
+# some races are not classified perfectly in districts rn so they would show up as list-columns (bad)
+bad_races <- df |> 
   count(cvr_id, race_id) |> 
   filter(n > 1) |> 
   distinct(race_id) |> 
   collect() |> 
   pull(race_id)
 
-randos <- base |> 
+randos <- df |> 
   distinct(cvr_id) |> 
   collect() |> 
   slice_sample(n=100)
 
-df <- base |> 
+df <- df |> 
   inner_join(randos) |> 
-  left_join(races, by = "race") |> 
-  left_join(candidates, by = "candidate") |> 
   filter(!(race_id %in% bad_races)) |>
   collect() |>
   drop_na(race_id, candidate_id)
