@@ -76,6 +76,7 @@ bad_races <- base |>
   count(cvr_id, race_id) |> 
   filter(n > 1) |> 
   distinct(race_id) |> 
+  collect() |> 
   pull(race_id)
 
 randos <- base |> 
@@ -117,7 +118,7 @@ stan_data <- list(
   candidates = candidate_availability,
   eligibility = eligibility_matrix,
   votes = votes_matrix,
-  parallelize = 0
+  parallelize = 1
 )
 
 rm(base, candidates, candidate_availability, df, eligibility_matrix, races, 
