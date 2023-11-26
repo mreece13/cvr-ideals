@@ -14,6 +14,8 @@ format:
   pdf:
     toc: false
     number-sections: false
+    citecolor: blue
+    link-citations: true
 ---
 
 ```{r}
@@ -92,20 +94,6 @@ Ends Against the Middle: Measuring Latent Traits when Opposites Respond the Same
 Nonparametric Ideal-Point Estimation and Inference Alexander Tahk
 
 Extension to modeling races with magnitude \> 1
-
-# Nov 11 Update
-
-```{r}
-#| label: fig-adams-2pl-offices
-#| fig-cap: Partisans, Binomial, 2PL -- Adams County, Colorado
-#| eval: true
-#| echo: false
-
-tar_read(plot_2pl_binomial_partisans_colorado_adams_offices)
-
-```
-
-As shown in @fig-adams-2pl-offices, each office is not very discriminatory. The reason for this is that most people are straight-ticket voters, and so there is mostly no variation among voters. Maybe could focus only on people who actually split a ticket, or perhaps just by including more people in the same we would be able to recover more of an effect here.
 
 \newpage
 
