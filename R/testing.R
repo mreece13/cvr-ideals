@@ -33,13 +33,14 @@ base <- open_dataset("~/cvrs/data/cvr_qa_main",
   mutate(candidate = case_when(
     str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
     TRUE ~ candidate
-  ))
+  )) |> 
+  collect()
+  
 
 ## Filter to top 2 candidates in each race
 top_cands <- base |> 
   count(race, candidate) |> 
   arrange(race, desc(n)) |> 
-  collect() |> 
   slice_head(n=2, by = race) |> 
   select(-n)
 
@@ -48,13 +49,11 @@ base <- inner_join(base, top_cands)
 races <- base |> 
   distinct(race) |> 
   arrange(race) |> 
-  collect() |> 
   mutate(race_id = row_number())
 
 candidates <- base |> 
   distinct(candidate) |> 
   arrange(candidate) |> 
-  collect() |> 
   mutate(candidate_id = row_number())
 
 # Create the candidate availability matrix
@@ -63,7 +62,6 @@ candidate_availability <- base |>
   left_join(races, by = "race") |> 
   left_join(candidates, by = "candidate") |> 
   select(-race, -candidate) |> 
-  collect() |> 
   drop_na(race_id, candidate_id) |> 
   complete(race_id, candidate_id, fill = list(available = FALSE)) |> 
   pivot_wider(names_from = candidate_id, values_from = available) |> 
@@ -80,25 +78,21 @@ bad_races <- df |>
   count(cvr_id, race_id) |> 
   filter(n > 1) |> 
   distinct(race_id) |> 
-  collect() |> 
   pull(race_id)
 
 randos <- df |> 
   distinct(cvr_id) |> 
-  collect() |> 
   slice_sample(n=100)
 
 df <- df |> 
   inner_join(randos) |> 
   filter(!(race_id %in% bad_races)) |>
-  collect() |>
   drop_na(race_id, candidate_id)
 
 # Create the votes matrix
 votes_matrix <- df |> 
   select(cvr_id, race_id, candidate_id) |> 
   arrange(race_id, candidate_id) |>
-  collect() |> 
   pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |> 
   select(-cvr_id)
 
