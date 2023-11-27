@@ -7,8 +7,8 @@ functions {
   real partial_sum(array[, ] int votes_slice,
                    int start, int end,
                    array[] real alpha,
-                   array[] real beta,
-                   array[] real gamma,
+                   array[,] real beta,
+                   array[,] real gamma,
                    real mu_beta,
                    array[,] int candidates,
                    array[,] int eligibility) {
@@ -22,21 +22,15 @@ functions {
     real partial_log_lik = 0;
     
     for (j in 1:N_slice) {
+      matrix[K, C] logits = rep_matrix(-1e8, K, C); // Initialize logits
       for (k in 1:K) {
         if (eligibility_slice[j, k] == 1) {
-          vector[C] logits = rep_vector(-1e8, C); // Initialize logits
-          int reference = 1;
           for (c in 1:C) {
             if (candidates[k, c] == 1) {
-              if (reference == 1) {
-                logits[c] = 0;
-                reference = 0;
-              } else {
-                logits[c] = gamma[k] .* (alpha_slice[j] - (beta[k] + mu_beta));
-              }
+              logits[k, c] = gamma[k, c] * (alpha_slice[j] - (beta[k, c] + mu_beta));
             }
           }
-          partial_log_lik += categorical_logit_lpmf(votes_slice[j, k] | logits);
+          partial_log_lik += categorical_logit_lpmf(votes_slice[j, k] | logits[k]');
         }
       }
     }
@@ -54,42 +48,75 @@ data {
   array[J, K] int<lower=0, upper=1> eligibility; // 1 if voter is eligible for race, 0 otherwise
 }
 
+transformed data {
+  vector[K] zeros = rep_vector(0, K);
+}
+
 parameters {
   real mu_beta; // mean question difficulty
   array[J] real alpha; // latent ability of voter j - mean latent ability
-  array[K] real beta;  // difficulty for each race
-  array[K] real<lower=0> gamma; // discrimination for each race
+  array[K, C] real beta_raw;  // difficulty for each race
+  array[K, C] real<lower=0> gamma_raw; // discrimination for each race
   real<lower=0> sigma_beta; // scale of difficulties
   real<lower=0> sigma_gamma; // scale of log discrimination
+}
+
+transformed parameters {
+  array[K, C] real beta = rep_array(0, K, C);  // difficulty for each race
+  array[K, C] real<lower=0> gamma = rep_array(0, K, C); // discrimination for each race
+  
+  for (k in 1:K){
+    int reference = 1;
+    for (c in 1:C){
+      if (candidates[k, c] == 1) {
+        if (reference == 1){
+          reference = 0;
+        } else {
+          beta[k, c] = beta_raw[k, c];
+          gamma[k, c] = gamma_raw[k, c];
+        }
+      }
+    }
+  }
+  
+  // print(beta);
+  // print(gamma);
+  
 }
 
 model {
   // Priors
   mu_beta ~ cauchy(0, 5);
   alpha ~ std_normal(); // set to N(0, 1) for identification
-  beta ~ normal(0, sigma_beta);
-  gamma ~ lognormal(0, sigma_gamma);
+  
+  for (k in 1:K){
+    beta_raw[k,] ~ normal(0, sigma_beta);
+    gamma_raw[k,] ~ lognormal(0, sigma_gamma);
+  }
+  
+  // beta_raw ~ normal(0, sigma_beta);
+  // gamma_raw ~ lognormal(0, sigma_gamma);
+  
+  // for (c in 1:C){
+  //   beta_raw[, c] ~ normal(0, sigma_beta);
+  //   gamma_raw[, c] ~ lognormal(0, sigma_gamma);
+  // }
+  
   sigma_beta ~ cauchy(0, 5);
   sigma_gamma ~ cauchy(0, 5);
   
   if (parallelize == 0){
     // Likelihood
     for (j in 1:J) {
+      matrix[K, C] logits = rep_matrix(-1e8, K, C); // Initialize logits
       for (k in 1:K) {
-        if (eligibility[j, k] == 1) { // Check if the voter is eligible for the race
-          vector[C] logits = rep_vector(-1e8, C); // Initialize logits with large negative values
-          int reference = 1;
+        if (eligibility[j, k] == 1) {
           for (c in 1:C) {
-            if (candidates[k, c] == 1) { // check if candidate could be voted for in this race
-              if (reference == 1){ // set alpha and beta to 0 if reference
-                logits[c] = 0;
-                reference = 0;
-              } else {
-                logits[c] = gamma[k] .* (alpha[j] - (beta[k] + mu_beta)); // 2PL IRT model
-              }
-            } 
+            if (candidates[k, c] == 1) {
+              logits[k, c] = gamma[k, c] * (alpha[j] - (beta[k, c] + mu_beta));
+            }
           }
-          target += categorical_logit_lpmf(votes[j, k] | logits);
+          target += categorical_logit_lpmf(votes[j, k] | logits[k]');
         }
       }
     }

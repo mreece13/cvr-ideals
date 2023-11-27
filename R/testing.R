@@ -123,47 +123,65 @@ gc()
 
 ## Optimized 2PL
 
-model <- cmdstan_model("R/mnm_varying_2pl_optimized.stan", compile = FALSE)
-model$compile(
-  cpp_options = list(stan_threads = TRUE)
-)
-
-fit <- model$sample(
-  data = stan_data,
-  # chains = 2,
-  # iter_warmup = 100,
-  # iter_sampling = 400,
-  seed = 02139,
-  parallel_chains = 4,
-  threads_per_chain = 16
-)
-
-fit$save_object("fits/cat_2pl.rds")
+# model <- cmdstan_model("R/mnm_varying_2pl_optimized.stan", compile = FALSE)
+# model$compile(
+#   cpp_options = list(stan_threads = TRUE)
+# )
+# 
+# fit <- model$sample(
+#   data = stan_data,
+#   # chains = 2,
+#   # iter_warmup = 100,
+#   # iter_sampling = 400,
+#   seed = 02139,
+#   parallel_chains = 4,
+#   threads_per_chain = 16
+# )
+# 
+# fit$save_object("fits/cat_2pl.rds")
 
 ## Fit Diagnostics
-
+# 
 # fit <- readRDS("fits/cat_2pl.rds")
 # 
 # rhat(fit)
 # 
-# draws <- fit$draws() |> 
-#   as_tibble() |> 
-#   select(contains("alpha"), contains("beta"), contains("gamma")) |> 
+# draws <- fit$draws() |>
+#   as_tibble() |>
+#   select(contains("alpha"), contains("beta"), contains("gamma")) |>
 #   mutate(across(everything(), ~ if_else(.x < 0.01, NA, .x)))
 # 
-# fit |> 
-#   spread_draws(alpha[cvr_id], gamma[race_id]) |> 
-#   ungroup() |> 
+# fit |>
+#   spread_draws(alpha[cvr_id], gamma[race_id]) |>
+#   ungroup() |>
 #   filter(cvr_id < 10) |>
-#   # filter(gamma > 0.05) |> 
-#   # left_join(races, join_by(race_id)) |> 
-#   # filter(race != "COUNTY JUDGE - ADAMS") |> 
+#   # filter(gamma > 0.05) |>
+#   # left_join(races, join_by(race_id)) |>
+#   # filter(race != "COUNTY JUDGE - ADAMS") |>
 #   ggplot(aes(x = alpha, y = as.character(cvr_id))) +
 #   stat_halfeye() +
 #   geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
 #   # scale_x_continuous(limits = c(0, 15)) +
 #   theme_bw()
 # 
-# mcmc_pairs(fit$draws(), pars = vars("alpha[1]", "alpha[2]", "alpha[3]", 
+# mcmc_pairs(fit$draws(), pars = vars("alpha[1]", "alpha[2]", "alpha[3]",
 #                                     "gamma[40]", "gamma[2]", "gamma[3]",
 #                                   "beta[40]", "beta[2]", "beta[3]"))
+
+
+## 2PL with parameters that vary by candidate
+
+model <- cmdstan_model("R/cat_2pl.stan", compile = FALSE)
+model$compile(
+  cpp_options = list(stan_threads = TRUE)
+)
+
+fit <- model$sample(
+  data = stan_data,
+  chains = 4,
+  seed = 02139,
+  parallel_chains = 4,
+  threads_per_chain = 16
+)
+
+fit$save_object("fits/cat_2pl_2.rds")
