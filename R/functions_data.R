@@ -97,7 +97,7 @@ get_stan_data <- function(data){
     arrange(race) |> 
     mutate(race_id = row_number())
   
-  candidates <- base |> 
+  candidates <- df |> 
     distinct(race, candidate) |> 
     arrange(race, candidate) |>
     select(-race) |>
