@@ -10,15 +10,9 @@ options("mc.cores" = 4)
 options("brms.backend" = "cmdstanr")
 options("future" = FALSE)
 
-tar_option_set(packages = c("tidyverse", "brms", "arrow", "tidybayes", "bayesplot", "cmdstanr", "googleCloudStorageR"),
+tar_option_set(packages = c("tidyverse", "brms", "arrow", "tidybayes", "bayesplot", "cmdstanr"),
                memory = "transient", 
-               garbage_collection = TRUE,
-               repository = "gcp",
-               resources = tar_resources(
-                 gcp = tar_resources_gcp(
-                   bucket = "cvr-ideals", 
-                   prefix = "ideals")
-                 )
+               garbage_collection = TRUE
 )
 tar_config_set(seconds_meta_append=15, 
                seconds_reporter=0.5
@@ -43,11 +37,9 @@ list(
              format = "qs"),
   tar_target(stan_data, get_stan_data(data_base_adams)),
   tar_target(stan_rasch_code, "R/mnm_varying_1pl.stan", format = "file"),
-  tar_target(stan_2pl_code, "R/mnm_varying_2pl_optimized.stan", format = "file"),
-  # tar_target(stan_rasch, compile_model(stan_rasch_code, type = "rasch"), format = "qs"),
-  # tar_target(stan_2pl, compile_model(stan_2pl_code, type = "2pl"), format = "qs"),
+  tar_target(stan_2pl_code, "R/cat_2pl.stan", format = "file"),
   tar_target(fit_rasch_categorical_colorado, fit_stan(stan_rasch_code, stan_data, "mnm_varying_1pl")),
-  tar_target(fit_2pl_categorical_colorado, fit_stan(stan_2pl_code, stan_data, "mnm_varying_2pl_optimized")),
+  tar_target(fit_2pl_categorical_colorado, fit_stan(stan_2pl_code, stan_data, "cat_2pl")),
   tar_target(plot_rasch_binomial_partisans_colorado_adams_voters, 
              plot_voters(fit_rasch_binomial_partisans_colorado_adams, randos_colorado_adams, twopl = FALSE)),
   tar_target(plot_2pl_binomial_partisans_colorado_adams_voters, 

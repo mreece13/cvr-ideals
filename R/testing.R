@@ -21,7 +21,7 @@ partial_schema <- schema(
   field("party_detailed", string())
 )
 
-base <- open_dataset("~/cvrs/data/cvr_qa_main",
+base <- open_dataset("../cvrs/data/cvr_qa_main",
                           partitioning = "state",
                           schema = partial_schema,
                           format = "parquet") |> 
@@ -186,40 +186,52 @@ fit <- model$sample(
 
 fit$save_object("fits/cat_2pl_2.rds")
 
-# fit <- readRDS("fits/cat_2pl_2.rds")
-# 
-# fit |> summarise_draws() |> summary()
-# 
-# joiner <- candidate_availability |> 
-#   as_tibble(rownames = "race_id") |> 
-#   pivot_longer(cols = -race_id, names_to = "candidate_id") |> 
-#   filter(value == 1) |> 
-#   select(-value) |> 
-#   mutate(across(everything(), as.numeric))
-# 
-# t <- fit |> 
-#   spread_draws(gamma[race_id, candidate_id], ndraws = 1) 
-# 
-# t |> 
-#   select(race_id, candidate_id, gamma) |> 
-#   pivot_wider(names_from = candidate_id, values_from = gamma)
-# 
-# gammas <- fit |>
-#   spread_draws(gamma[race_id, candidate_id]) |>
-#   inner_join(joiner) |> 
-#   left_join(races) |> 
-#   left_join(candidates) |> 
-#   ungroup()
-# 
-# gammas |> 
-#   filter(race == "US PRESIDENT - STATEWIDE", candidate == "JOSEPH R BIDEN") |> 
-#   ggplot(aes(x = gamma, y = candidate)) +
-#   stat_halfeye() +
-#   geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
-#   # facet_wrap(~ race, scales = "free") +
-#   scale_x_continuous(limits = c(0, 15)) +
-#   theme_bw()
-# 
-# mcmc_pairs(fit$draws(), pars = vars("alpha[1]", "alpha[2]", "alpha[3]",
-#                                     "gamma[40]", "gamma[2]", "gamma[3]",
-#                                   "beta[40]", "beta[2]", "beta[3]"))
+fit <- readRDS("fits/cat_2pl_2.rds")
+
+fit |> summarise_draws() |> summary()
+
+joiner <- candidate_availability |>
+  as_tibble(rownames = "race_id") |>
+  pivot_longer(cols = -race_id, names_to = "candidate_id") |>
+  filter(value == 1) |>
+  select(-value) |>
+  mutate(across(everything(), as.numeric))
+
+t <- fit |>
+  spread_draws(gamma[race_id, candidate_id], ndraws = 1)
+
+t |>
+  select(race_id, candidate_id, gamma) |>
+  pivot_wider(names_from = candidate_id, values_from = gamma)
+
+gammas <- fit |>
+  spread_draws(gamma[race_id, candidate_id]) |>
+  inner_join(joiner) |>
+  left_join(races) |>
+  left_join(candidates) |>
+  ungroup()
+
+betas <- fit |>
+  spread_draws(beta[race_id, candidate_id]) |>
+  inner_join(joiner) |>
+  left_join(races) |>
+  left_join(candidates) |>
+  ungroup()
+
+gammas |>
+  filter(!str_detect(race, "PROPOSITION")) |>
+  ggplot(aes(x = gamma, y = candidate)) +
+  stat_pointinterval(.width = 0.9) +
+  geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
+  facet_wrap(~ race, scales = "free_y") +
+  scale_x_continuous(limits = c(0, 15)) +
+  theme_bw()
+
+fit |> 
+  spread_draws(alpha[cvr_id]) |> 
+  mutate(alpha = (alpha - mean(alpha))/sd(alpha)) |> 
+  filter(cvr_id < 15) |> 
+  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
+  stat_halfeye() +
+  geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
+  theme_bw()

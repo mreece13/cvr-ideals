@@ -52,7 +52,7 @@ fit_stan <- function(model, stan_data, file_name){
     iter_sampling = 1000,
     seed = 02139,
     parallel_chains = 4,
-    threads_per_chain = 16
+    threads_per_chain = 20
   )
   
   path <- str_c("fits/", file_name, ".rds")

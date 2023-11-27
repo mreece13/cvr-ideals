@@ -97,9 +97,10 @@ get_stan_data <- function(data){
     arrange(race) |> 
     mutate(race_id = row_number())
   
-  candidates <- df |> 
-    distinct(candidate) |> 
-    arrange(candidate) |> 
+  candidates <- base |> 
+    distinct(race, candidate) |> 
+    arrange(race, candidate) |>
+    select(-race) |>
     mutate(candidate_id = row_number())
   
   # Create the candidate availability matrix
@@ -108,7 +109,6 @@ get_stan_data <- function(data){
     left_join(races, by = "race") |> 
     left_join(candidates, by = "candidate") |> 
     select(-race, -candidate) |> 
-    collect() |> 
     drop_na(race_id, candidate_id) |> 
     complete(race_id, candidate_id, fill = list(available = FALSE)) |> 
     pivot_wider(names_from = candidate_id, values_from = available) |> 

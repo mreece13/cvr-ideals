@@ -74,10 +74,6 @@ transformed parameters {
       }
     }
   }
-  
-  // print(beta);
-  // print(gamma);
-  
 }
 
 model {
