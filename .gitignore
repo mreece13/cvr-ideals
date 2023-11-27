@@ -15,4 +15,5 @@ meta/*
 !meta/meta
 _targets/
 hill_tausanovitch/
+fits/
 googlecloudstorager-auth-key.json
