@@ -36,15 +36,14 @@ base <- open_dataset("~/cvrs/data/cvr_qa_main",
   )) |> 
   collect()
   
-
 ## Filter to top 2 candidates in each race
-top_cands <- base |> 
-  count(race, candidate) |> 
-  arrange(race, desc(n)) |> 
-  slice_head(n=2, by = race) |> 
-  select(-n)
-
-base <- inner_join(base, top_cands)
+# top_cands <- base |>
+#   count(race, candidate) |>
+#   arrange(race, desc(n)) |>
+#   slice_head(n=2, by = race) |>
+#   select(-n)
+# 
+# base <- inner_join(base, top_cands)
 
 races <- base |> 
   distinct(race) |> 
@@ -52,8 +51,9 @@ races <- base |>
   mutate(race_id = row_number())
 
 candidates <- base |> 
-  distinct(candidate) |> 
-  arrange(candidate) |> 
+  distinct(race, candidate) |> 
+  arrange(race, candidate) |>
+  select(-race) |>
   mutate(candidate_id = row_number())
 
 # Create the candidate availability matrix
@@ -118,7 +118,7 @@ stan_data <- list(
 )
 
 rm(base, candidates, candidate_availability, df, eligibility_matrix, races, 
-   randos, top_cands, votes_matrix, bad_races, missing, partial_schema)
+   randos, votes_matrix, bad_races, missing, partial_schema)
 gc()
 
 ## Optimized 2PL
@@ -181,7 +181,45 @@ fit <- model$sample(
   chains = 4,
   seed = 02139,
   parallel_chains = 4,
-  threads_per_chain = 16
+  threads_per_chain = 20
 )
 
 fit$save_object("fits/cat_2pl_2.rds")
+
+# fit <- readRDS("fits/cat_2pl_2.rds")
+# 
+# fit |> summarise_draws() |> summary()
+# 
+# joiner <- candidate_availability |> 
+#   as_tibble(rownames = "race_id") |> 
+#   pivot_longer(cols = -race_id, names_to = "candidate_id") |> 
+#   filter(value == 1) |> 
+#   select(-value) |> 
+#   mutate(across(everything(), as.numeric))
+# 
+# t <- fit |> 
+#   spread_draws(gamma[race_id, candidate_id], ndraws = 1) 
+# 
+# t |> 
+#   select(race_id, candidate_id, gamma) |> 
+#   pivot_wider(names_from = candidate_id, values_from = gamma)
+# 
+# gammas <- fit |>
+#   spread_draws(gamma[race_id, candidate_id]) |>
+#   inner_join(joiner) |> 
+#   left_join(races) |> 
+#   left_join(candidates) |> 
+#   ungroup()
+# 
+# gammas |> 
+#   filter(race == "US PRESIDENT - STATEWIDE", candidate == "JOSEPH R BIDEN") |> 
+#   ggplot(aes(x = gamma, y = candidate)) +
+#   stat_halfeye() +
+#   geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
+#   # facet_wrap(~ race, scales = "free") +
+#   scale_x_continuous(limits = c(0, 15)) +
+#   theme_bw()
+# 
+# mcmc_pairs(fit$draws(), pars = vars("alpha[1]", "alpha[2]", "alpha[3]",
+#                                     "gamma[40]", "gamma[2]", "gamma[3]",
+#                                   "beta[40]", "beta[2]", "beta[3]"))

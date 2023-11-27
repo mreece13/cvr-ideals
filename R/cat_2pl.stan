@@ -48,10 +48,6 @@ data {
   array[J, K] int<lower=0, upper=1> eligibility; // 1 if voter is eligible for race, 0 otherwise
 }
 
-transformed data {
-  vector[K] zeros = rep_vector(0, K);
-}
-
 parameters {
   real mu_beta; // mean question difficulty
   array[J] real alpha; // latent ability of voter j - mean latent ability
@@ -93,14 +89,6 @@ model {
     beta_raw[k,] ~ normal(0, sigma_beta);
     gamma_raw[k,] ~ lognormal(0, sigma_gamma);
   }
-  
-  // beta_raw ~ normal(0, sigma_beta);
-  // gamma_raw ~ lognormal(0, sigma_gamma);
-  
-  // for (c in 1:C){
-  //   beta_raw[, c] ~ normal(0, sigma_beta);
-  //   gamma_raw[, c] ~ lognormal(0, sigma_gamma);
-  // }
   
   sigma_beta ~ cauchy(0, 5);
   sigma_gamma ~ cauchy(0, 5);
