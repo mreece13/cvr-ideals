@@ -1,0 +1,195 @@
+---
+title: "Estimation of Ideal Points using Cast Vote Records"
+subtitle: "Quant III and Bayesian Measurement"
+date: today
+date-format: long
+embed-resources: true
+bibliography: references.bib
+suppress-bibliography: true
+author: "Mason Reece"
+format:
+  revealjs:
+    smaller: true
+    progress: false
+    theme: ["medsl.scss"]
+    slide-number: c
+    css: medsl.css
+    footer: "Reece -- CVR Ideals"
+    fig-cap-location: top
+    fig-responsive: true
+    echo: false
+    cache: true
+    incremental: true
+  beamer:
+    theme: metropolis
+    include-in-header: metropolis_options_mit.tex
+---
+
+## Introduction
+
+```{r}
+#| output: false
+
+library(patchwork)
+library(tidyverse)
+```
+
+How representative is a government of its people?
+
+<div>
+
+-   One approach (of many) compares the "ideological" positions of legislators and voters
+    -   For legislators: roll-call votes [@poole_patterns_1991], campaign contributions [@bonica_mapping_2014; @bonica_inferring_2018], tweets [@barberá2015], etc.
+    -   For voters: surveys [e.g., @bafumi_leapfrog_2010] and **cast vote records (CVRs)** [@lewis2001]
+        -   I focus on CVRs because they have the most complete information and let us answer questions about down-ballot races
+
+</div>
+
+## Cast Vote Records
+
+::: {layout="[10,8]"}
+![](figs/pres_ballot.jpg){fig-align="left" width="543"}
+
+-   Anonymous records of what candidate each voter picked in each race on the ballot \pause
+
+-   Modelling challenges
+
+    -   Categorical outcome with different options for each race
+
+    -   People vote in different races \pause
+
+-   1.3B "bubbles" and 50m voters in 2020 election
+:::
+
+## Distribution of Cast Vote Records
+
+![](writing/images/county_map2.jpeg)
+
+## Methodology
+
+Continuous, latent outcome with categorical indicators --\> IRT model \pause
+
+$$
+\pi_{j,k(c)} = logit^{-1} (\gamma_{k(c)} (\alpha_j - \beta_{k(c)}))
+$$
+
+where $j$ indexes individuals and $k(c)$ indexes a specific candidate $c$ in a race $k$.
+
+-   $\gamma$ is the "discrimination" parameter
+
+    -   $=1$ in the "Rasch" model, implies all races inform $\alpha$ equally
+
+-   $\alpha$ is the latent trait
+
+-   $\beta$ is the "difficulty" parameter
+
+-   $\kappa = \frac{\alpha}{\beta}$ is the cutpoint between each choice
+
+## Identification and Priors
+
+-   The scale and location of $\alpha$ are unidentified (can add or multiply a constant with no change in likelihood) \pause
+
+    -   Set prior to $\mathcal{N}(0, 1)$ \pause
+
+-   $\gamma$'s sign can also flip around with relation to the sign of $\alpha$. \pause
+
+    -   Constrain $\gamma > 0$ \pause
+
+-   Priors
+
+    -   Uninformative, standard priors for other parameters
+
+    -   Future work: Informative priors using party or NOMINATE/DIME scores to help with identification and speed convergence
+
+## `brms` Binomial Models
+
+```{r}
+#| eval: false
+
+form_rasch <- bf(
+  choice_rep ~ 1 + (1 | race) + (1 | cvr_id),
+  family = brmsfamily("bernoulli", link = "logit")
+)
+
+form_2pl <- bf(
+  choice_rep ~ beta + exp(loggamma) * alpha,
+  nl = TRUE,
+  alpha ~ 0 + (1 | cvr_id),
+  beta ~ 1 + (1 |i| race),
+  loggamma ~ 1 + (1 |i| race),
+  family = brmsfamily("bernoulli", link = "logit")
+)
+
+```
+
+## `Stan` Categorical Models
+
+``` stan
+// Priors
+mu_beta ~ cauchy(0, 5);
+alpha ~ std_normal();
+
+for (k in 1:K){
+  beta_raw[k,] ~ normal(0, sigma_beta);
+  gamma_raw[k,] ~ lognormal(0, sigma_gamma);
+}
+
+sigma_beta ~ cauchy(0, 5);
+sigma_gamma ~ cauchy(0, 5);
+
+// Likelihood
+for (j in 1:J) {
+  matrix[K, C] logits = rep_matrix(-1e8, K, C);
+  for (k in 1:K) {
+    if (eligibility[j, k] == 1) {
+      for (c in 1:C) {
+        if (candidates[k, c] == 1) {
+          logits[k, c] = gamma[k, c] * alpha[j] - (beta[k, c] + mu_beta);
+        }
+      }
+      target += categorical_logit_lpmf(votes[j, k] | logits[k]');
+    }
+  }
+}
+```
+
+## Convergence
+
+```{r}
+# targets::tar_read(plot_rhat_comparison)
+```
+
+## $\pi_{i, j(c)}$ as a Binary Variable -- Rasch
+
+## Binary Results - $\alpha$
+
+```{r}
+
+p1 <- targets::tar_read(plot_rasch_binomial_partisans_colorado_adams_voters) +
+  labs(title = "Rasch Model")
+
+p2 <- targets::tar_read(plot_2pl_binomial_partisans_colorado_adams_voters) +
+  labs(title = "2PL Model")
+
+p1 + p2
+```
+
+## Binary Results - $\beta$ and $\gamma$
+
+```{r}
+
+targets::tar_read(plot_2pl_binomial_partisans_colorado_adams_offices)
+
+```
+
+## $\pi_{i, j(c)}$ as a Categorical Variable -- Rasch
+
+## Categorical Rasch Results
+
+## Categorical 2PL Results
+
+## Application to Representation
+
+Work with the binary 2PL results, since they are easiest to interpret
+
+## References {.r-fit-text}
