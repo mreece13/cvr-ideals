@@ -27,7 +27,7 @@ functions {
         if (eligibility_slice[j, k] == 1) {
           for (c in 1:C) {
             if (candidates[k, c] == 1) {
-              logits[k, c] = gamma[k, c] * (alpha_slice[j] - (beta[k, c] + mu_beta));
+              logits[k, c] = gamma[k, c] * alpha_slice[j] - (beta[k, c] + mu_beta));
             }
           }
           partial_log_lik += categorical_logit_lpmf(votes_slice[j, k] | logits[k]');
@@ -97,7 +97,7 @@ model {
         if (eligibility[j, k] == 1) {
           for (c in 1:C) {
             if (candidates[k, c] == 1) {
-              logits[k, c] = gamma[k, c] * (alpha[j] - (beta[k, c] + mu_beta));
+              logits[k, c] = gamma[k, c] * alpha[j] - (beta[k, c] + mu_beta);
             }
           }
           target += categorical_logit_lpmf(votes[j, k] | logits[k]');
