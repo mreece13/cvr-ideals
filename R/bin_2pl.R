@@ -64,6 +64,22 @@ data_colorado <- base_data |>
          !(office == "US HOUSE" & district == "57"),
          !(office == "US SENATE" & district == "8"))
 
+form_2pl <- bf(
+  choice_rep ~ beta + exp(loggamma) * alpha,
+  nl = TRUE,
+  alpha ~ 0 + (1 | cvr_id),
+  beta ~ 1 + (1 |i| race),
+  loggamma ~ 1 + (1 |i| race),
+  family = brmsfamily("bernoulli", link = "logit")
+)
+
+prior_2pl <- 
+  prior("normal(0, 2)", class = "b", nlpar = "beta") +
+  prior("normal(0, 1)", class = "b", nlpar = "loggamma") +
+  prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") + 
+  prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
+  prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
+
 # Add More Counties to 2PL
 brm(
   formula = form_2pl,
