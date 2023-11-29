@@ -211,7 +211,7 @@ races <- df |>
 candidates <- df |> 
   distinct(race, candidate) |> 
   arrange(race, candidate) |>
-  select(-race) |>
+  # select(-race) |>
   mutate(candidate_id = row_number())
 
 bad_races <- df |> 
@@ -256,10 +256,10 @@ gammas <- fit |>
   ungroup()
 
 betas <- fit |>
-  spread_draws(beta[race_id, candidate_id]) |>
-  inner_join(joiner) |>
+  spread_draws(beta[race_id]) |>
+  # inner_join(joiner) |>
   left_join(races) |>
-  left_join(candidates) |>
+  # left_join(candidates) |>
   ungroup()
 
 gammas |>
@@ -275,10 +275,195 @@ alphas <- fit |>
   spread_draws(alpha[cvr_id])
 
 alphas |> 
-  mutate(alpha = (alpha - mean(alpha))/sd(alpha)) |> 
+  # mutate(alpha = (alpha - mean(alpha))/sd(alpha)) |> 
   left_join(votes_matrix, by = c("cvr_id" = "id")) |> 
   # filter(cvr_id < 15) |> 
   ggplot(aes(x = alpha, fill = as.character(trump_voter), group = as.character(trump_voter), color = as.character(trump_voter))) +
   geom_density() +
   geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
+  theme_bw()
+
+
+fit <- readRDS("fits/mnm_varying_1pl.rds")
+
+alphas |> 
+  filter(cvr_id < 10) |> 
+  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
+  stat_halfeye() +
+  theme_bw()
+
+
+betas |>
+  filter(!str_detect(race, "JUDGE")) |>
+  ggplot(aes(x = beta, y = race)) +
+  stat_pointinterval() +
+  geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
+  # facet_wrap(~ race, scales = "free") +
+  # scale_x_continuous(limits = c(0, 15)) +
+  theme_bw()
+
+
+########################
+
+model <- cmdstan_model("R/cat_1pl.stan", compile = FALSE)
+model$compile(
+  cpp_options = list(stan_threads = TRUE)
+)
+
+fit <- model$sample(
+  data = stan_data,
+  # chains = 2,
+  # iter_warmup = 100,
+  # iter_sampling = 400,
+  seed = 02139,
+  parallel_chains = 4,
+  threads_per_chain = 2
+)
+
+fit$save_object("fits/cat_2pl.rds")
+
+
+fit <- targets::tar_read(fit_2pl_binomial_partisans_colorado_adams)
+
+data <- targets::tar_read(data_colorado_adams)
+data_all <- targets::tar_read(data_colorado)
+
+form_2pl <- bf(
+  choice_rep ~ beta + exp(loggamma) * alpha,
+  nl = TRUE,
+  alpha ~ 0 + (1 | cvr_id),
+  beta ~ 1 + (1 |i| race),
+  loggamma ~ 1 + (1 |i| race),
+  family = brmsfamily("bernoulli", link = "logit")
+)
+
+prior_2pl <- 
+  prior("normal(0, 2)", class = "b", nlpar = "beta") +
+  prior("normal(0, 1)", class = "b", nlpar = "loggamma") +
+  prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") + 
+  prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
+  prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
+
+fit_2pl <- brm(
+  formula = form_2pl,
+  prior = prior_2pl,
+  data = data,
+  chains = 4,
+  iter = 2000,
+  file = "fits/bin_2pl",
+  file_refit = "on_change",
+  sample_prior = TRUE,
+  seed = 02139,
+  silent = 0,
+  control = list(adapt_delta = 0.95)
+)
+
+
+## Person Locations
+
+person_pars_2pl <- ranef(fit_2pl, summary = FALSE)$cvr_id[, , "alpha_Intercept"] 
+
+person_sds_2pl <- apply(person_pars_2pl, 1, sd)
+
+person_pars_2pl <- person_pars_2pl |>
+  sweep(1, person_sds_2pl, "/") |>
+  posterior_summary() |>
+  as_tibble() |>
+  rownames_to_column(var = "cvr_id")
+
+person_pars_2pl |> 
+  ggplot(aes(x = Estimate)) +
+  geom_histogram() +
+  theme_bw()
+
+person_pars_2pl |>
+  slice_sample(n=15) |> 
+  arrange(Estimate) |>
+  mutate(id2 = seq_len(n())) |>
+  ggplot(aes(cvr_id, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+  geom_pointrange(alpha = 0.7) +
+  coord_flip() +
+  labs(x = "Person Number (sorted after Estimate)") +
+  theme_bw()
+
+## Race Locations
+
+item_pars_2pl <- coef(fit_2pl, summary = FALSE)$race
+
+# locations
+beta <- item_pars_2pl[, , "beta_Intercept"] |>
+  posterior_summary() |>
+  as_tibble() |>
+  rownames_to_column()
+
+# slopes
+gamma <- item_pars_2pl[, , "loggamma_Intercept"] |>
+  exp() |>
+  sweep(1, person_sds_2pl, "*") |>
+  posterior_summary() |>
+  as_tibble() |>
+  rownames_to_column()
+
+item_pars_2pl <- bind_rows(beta, gamma, .id = "nlpar") |>
+  rename(item = "rowname") |>
+  mutate(item = as.numeric(item)) |>
+  mutate(
+    nlpar = factor(nlpar, labels = c("Easiness", "Discrimination"))
+  )
+
+item_pars_2pl |> 
+  ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+  geom_pointrange() +
+  facet_wrap("nlpar", scales = "free_x") +
+  coord_flip() +
+  labs(x = "Item Number") +
+  theme_bw()
+
+#### Rasch Model too
+
+form_1pl <- bf(
+  choice_rep ~ 1 + (1 | race) + (1 | cvr_id),
+  family = brmsfamily("bernoulli", link = "logit")
+)
+
+prior_1pl <- 
+  prior("normal(0, 2)", class = "Intercept") +
+  prior("normal(0, 3)", class = "sd", group = "cvr_id") + 
+  prior("normal(0, 3)", class = "sd", group = "race")
+
+fit_1pl <- brm(
+  formula = form_1pl,
+  prior = prior_1pl,
+  data = data_colorado,
+  chains = 4,
+  iter = 2000,
+  file = "fits/bin_1pl_colorado",
+  file_refit = "on_change",
+  sample_prior = TRUE,
+  seed = 02139,
+  silent = 0
+)
+
+person_pars_1pl <- ranef(fit_1pl, summary = FALSE)$cvr_id[, , "Intercept"]
+
+person_sds_1pl <- apply(person_pars_1pl, 1, sd)
+
+person_pars_1pl <- person_pars_1pl |>
+  sweep(1, person_sds_1pl, "/") |>
+  posterior_summary() |>
+  as_tibble() |>
+  rownames_to_column(var = "cvr_id")
+
+person_pars_1pl |> 
+  ggplot(aes(x = Estimate)) +
+  geom_histogram() +
+  theme_bw()
+
+person_pars_1pl |>
+  slice_sample(n=15) |> 
+  arrange(Estimate) |>
+  ggplot(aes(cvr_id, Estimate, ymin = Q2.5, ymax = Q97.5)) +
+  geom_pointrange(alpha = 0.7) +
+  coord_flip() +
+  labs(x = "Person Number (sorted after Estimate)") +
   theme_bw()
