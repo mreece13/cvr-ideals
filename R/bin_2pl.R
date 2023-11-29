@@ -94,3 +94,26 @@ brm(
   silent = 0,
   control = list(adapt_delta = 0.95)
 )
+
+form_1pl <- bf(
+  choice_rep ~ 1 + (1 | race) + (1 | cvr_id),
+  family = brmsfamily("bernoulli", link = "logit")
+)
+
+prior_1pl <- 
+  prior("normal(0, 2)", class = "Intercept") +
+  prior("normal(0, 3)", class = "sd", group = "cvr_id") + 
+  prior("normal(0, 3)", class = "sd", group = "race")
+
+brm(
+  formula = form_1pl,
+  prior = prior_1pl,
+  data = data_colorado,
+  chains = 4,
+  iter = 2000,
+  file = "fits/bin_1pl_colorado",
+  file_refit = "on_change",
+  sample_prior = TRUE,
+  seed = 02139,
+  silent = 0
+)
