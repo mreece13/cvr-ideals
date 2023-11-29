@@ -7,8 +7,8 @@ functions {
   real partial_sum(array[, ] int votes_slice,
                    int start, int end,
                    array[] real alpha,
-                   array[] real beta,
-                   real delta,
+                   array[,] real beta,
+                   real mu_beta,
                    array[,] int candidates,
                    array[,] int eligibility) {
     
@@ -21,21 +21,15 @@ functions {
     real partial_log_lik = 0;
     
     for (j in 1:N_slice) {
+      matrix[K, C] logits = rep_matrix(-1e8, K, C); // Initialize logits
       for (k in 1:K) {
         if (eligibility_slice[j, k] == 1) {
-          vector[C] logits = rep_vector(-1e8, C); // Initialize logits
-          int reference = 1;
           for (c in 1:C) {
             if (candidates[k, c] == 1) {
-              if (reference == 1) {
-                logits[c] = delta;
-                reference = 0;
-              } else {
-                logits[c] = alpha_slice[j] - beta[k] + delta;
-              }
+              logits[k, c] = alpha_slice[j] - (beta[k, c] + mu_beta);
             }
           }
-          partial_log_lik += categorical_logit_lpmf(votes_slice[j, k] | logits);
+          partial_log_lik += categorical_logit_lpmf(votes_slice[j, k] | logits[k]');
         }
       }
     }
@@ -54,18 +48,41 @@ data {
 }
 
 parameters {
-  real delta; // mean latent ability
+  real mu_beta; // mean question difficulty
   array[J] real alpha; // latent ability of voter j - mean latent ability
-  array[K] real beta;  // difficulty for each race
+  array[K, C] real beta_raw;  // difficulty for each race
+  real<lower=0> sigma_beta; // scale of difficulties
+}
+
+transformed parameters {
+  array[K, C] real beta = rep_array(0, K, C);  // difficulty for each race
+
+  for (k in 1:K){
+    int reference = 1;
+    for (c in 1:C){
+      if (candidates[k, c] == 1) {
+        if (reference == 1){
+          reference = 0;
+        } else {
+          beta[k, c] = beta_raw[k, c];
+        }
+      }
+    }
+  }
 }
 
 model {
   // Priors
-  alpha ~ std_normal();
-  beta ~ std_normal();
-  delta ~ std_normal();
+  mu_beta ~ cauchy(0, 5);
+  alpha ~ std_normal(); // set to N(0, 1) for identification
+  
+  for (k in 1:K){
+    beta_raw[k,] ~ normal(0, sigma_beta); // hierarchical parameters for beta
+  }
+  
+  sigma_beta ~ cauchy(0, 5);
   
   int grainsize = 1;
 
-  target += reduce_sum(partial_sum, votes, grainsize, alpha, beta, delta, candidates, eligibility);
+  target += reduce_sum(partial_sum, votes, grainsize, alpha, beta, mu_beta, candidates, eligibility);
 }

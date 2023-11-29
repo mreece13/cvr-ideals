@@ -186,23 +186,67 @@ fit <- model$sample(
 
 fit$save_object("fits/cat_2pl_2.rds")
 
-fit <- readRDS("fits/cat_2pl_2.rds")
+fit <- readRDS("fits/cat_2pl.rds")
 
-fit |> summarise_draws() |> summary()
+fit |> summarise_draws(.cores = 4) |> filter(!str_detect(variable, "alpha")) |> summary()
 
-joiner <- candidate_availability |>
+stan_data <- targets::tar_read(stan_data)
+data <- targets::tar_read(data_base_adams)
+
+targets::tar_read(plot_rhat_comparison)
+
+df <- data |> 
+  # propositions are not quite right
+  mutate(candidate = case_when(
+    str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
+    TRUE ~ candidate
+  ))
+
+# Assign unique IDs to races and candidates
+races <- df |> 
+  distinct(race) |> 
+  arrange(race) |> 
+  mutate(race_id = row_number())
+
+candidates <- df |> 
+  distinct(race, candidate) |> 
+  arrange(race, candidate) |>
+  select(-race) |>
+  mutate(candidate_id = row_number())
+
+bad_races <- df |> 
+  left_join(races) |> 
+  left_join(candidates) |> 
+  count(cvr_id, race_id) |> 
+  filter(n > 1) |> 
+  distinct(race_id) |> 
+  pull(race_id)
+
+votes_matrix <- df |> 
+  left_join(races) |> 
+  left_join(candidates) |> 
+  filter(!(race_id %in% bad_races)) |> 
+  mutate(trump_voter = ifelse(race == "US PRESIDENT - STATEWIDE" & candidate == "DONALD J TRUMP", 1, 0), .by = cvr_id) |> 
+  select(cvr_id, race_id, candidate_id, trump_voter) |> 
+  arrange(race_id, candidate_id) |>
+  pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |> 
+  select(cvr_id, trump_voter) |> 
+  mutate(id = row_number())
+
+joiner <- stan_data$candidates |>
   as_tibble(rownames = "race_id") |>
   pivot_longer(cols = -race_id, names_to = "candidate_id") |>
   filter(value == 1) |>
   select(-value) |>
-  mutate(across(everything(), as.numeric))
+  mutate(across(everything(), as.numeric)) |> 
+  filter(!(race_id %in% bad_races))
 
-t <- fit |>
-  spread_draws(gamma[race_id, candidate_id], ndraws = 1)
-
-t |>
-  select(race_id, candidate_id, gamma) |>
-  pivot_wider(names_from = candidate_id, values_from = gamma)
+# t <- fit |>
+#   spread_draws(gamma[race_id, candidate_id], ndraws = 1)
+# 
+# t |>
+#   select(race_id, candidate_id, gamma) |>
+#   pivot_wider(names_from = candidate_id, values_from = gamma)
 
 gammas <- fit |>
   spread_draws(gamma[race_id, candidate_id]) |>
@@ -219,19 +263,22 @@ betas <- fit |>
   ungroup()
 
 gammas |>
-  filter(!str_detect(race, "PROPOSITION")) |>
+  filter(!str_detect(candidate, "PROPOSITION")) |>
   ggplot(aes(x = gamma, y = candidate)) +
-  stat_pointinterval(.width = 0.9) +
+  stat_pointinterval() +
   geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
-  facet_wrap(~ race, scales = "free_y") +
-  scale_x_continuous(limits = c(0, 15)) +
+  facet_wrap(~ race, scales = "free") +
+  # scale_x_continuous(limits = c(0, 15)) +
   theme_bw()
 
-fit |> 
-  spread_draws(alpha[cvr_id]) |> 
+alphas <- fit |> 
+  spread_draws(alpha[cvr_id])
+
+alphas |> 
   mutate(alpha = (alpha - mean(alpha))/sd(alpha)) |> 
-  filter(cvr_id < 15) |> 
-  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
-  stat_halfeye() +
+  left_join(votes_matrix, by = c("cvr_id" = "id")) |> 
+  # filter(cvr_id < 15) |> 
+  ggplot(aes(x = alpha, fill = as.character(trump_voter), group = as.character(trump_voter), color = as.character(trump_voter))) +
+  geom_density() +
   geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
   theme_bw()
