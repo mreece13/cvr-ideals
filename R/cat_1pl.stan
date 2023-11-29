@@ -21,15 +21,21 @@ functions {
     real partial_log_lik = 0;
     
     for (j in 1:N_slice) {
-      matrix[K, C] logits = rep_matrix(-1e8, K, C); // Initialize logits
       for (k in 1:K) {
         if (eligibility_slice[j, k] == 1) {
+          vector[C] logits = rep_vector(-1e8, C); // Initialize logits
+          int reference = 1;
           for (c in 1:C) {
             if (candidates[k, c] == 1) {
-              logits[k, c] = alpha_slice[j] - (beta[k, c] + mu_beta);
+              if (reference == 1) {
+                logits[c] = mu_beta;
+                reference = 0;
+              } else {
+                logits[c] = alpha_slice[j] - (beta[k, c] + mu_beta);
+              }
             }
           }
-          partial_log_lik += categorical_logit_lpmf(votes_slice[j, k] | logits[k]');
+          partial_log_lik += categorical_logit_lpmf(votes_slice[j, k] | logits);
         }
       }
     }
@@ -48,39 +54,21 @@ data {
 }
 
 parameters {
-  real mu_beta; // mean question difficulty
+  real mu_beta; // mean latent ability
   array[J] real alpha; // latent ability of voter j - mean latent ability
-  array[K, C] real beta_raw;  // difficulty for each race
-  real<lower=0> sigma_beta; // scale of difficulties
-}
-
-transformed parameters {
-  array[K, C] real beta = rep_array(0, K, C);  // difficulty for each race
-
-  for (k in 1:K){
-    int reference = 1;
-    for (c in 1:C){
-      if (candidates[k, c] == 1) {
-        if (reference == 1){
-          reference = 0;
-        } else {
-          beta[k, c] = beta_raw[k, c];
-        }
-      }
-    }
-  }
+  array[K, C] real beta;  // difficulty for each race
+  array[K] real<lower=0> sigma_beta; // hierarchical SD for beta, shared for each race
 }
 
 model {
   // Priors
+  alpha ~ std_normal();
   mu_beta ~ cauchy(0, 5);
-  alpha ~ std_normal(); // set to N(0, 1) for identification
+  sigma_beta ~ cauchy(0, 5);
   
   for (k in 1:K){
-    beta_raw[k,] ~ normal(0, sigma_beta); // hierarchical parameters for beta
+    beta[k,] ~ normal(0, sigma_beta[k]);
   }
-  
-  sigma_beta ~ cauchy(0, 5);
   
   int grainsize = 1;
 
