@@ -29,9 +29,17 @@ format:
 
 ```{r}
 #| output: false
+#| cache: false
+
+set.seed(02139)
 
 library(patchwork)
 library(tidyverse)
+library(brms)
+library(tidybayes)
+library(bayesplot)
+library(targets)
+
 ```
 
 How representative is a government of its people?
@@ -85,6 +93,24 @@ where $j$ indexes individuals and $k(c)$ indexes a specific candidate $c$ in a r
 
 -   $\kappa = \frac{\alpha}{\beta}$ is the cutpoint between each choice
 
+## Modeling $\pi$
+
+-   $\pi_{i, j(c)}$ as a Binary Variable
+
+    -   $Pr(\pi_{i, j(c)} = 1)$ , where $=1$ implies the voter chose the Republican candidate
+
+        -   Arbitrary choice of Republican, but makes scale normal
+
+-   $\pi_{i, j(c)}$ as a Categorical Variable
+
+    -   $Pr(\pi_{i, j(c)} = c)$ for each candidate
+
+    -   Now I also estimate discrimination and difficulty parameters by candidate
+
+        -   Everything is now relative to the baseline, makes interpretation confusing
+
+    -   Subset to just Adams County, Colorado
+
 ## Identification and Priors
 
 -   The scale and location of $\alpha$ are unidentified (can add or multiply a constant with no change in likelihood) \pause
@@ -103,8 +129,10 @@ where $j$ indexes individuals and $k(c)$ indexes a specific candidate $c$ in a r
 
 ## `brms` Binomial Models
 
+::: {style="font-size: 180%"}
 ```{r}
 #| eval: false
+#| echo: true
 
 form_rasch <- bf(
   choice_rep ~ 1 + (1 | race) + (1 | cvr_id),
@@ -119,11 +147,12 @@ form_2pl <- bf(
   loggamma ~ 1 + (1 |i| race),
   family = brmsfamily("bernoulli", link = "logit")
 )
-
 ```
+:::
 
 ## `Stan` Categorical Models
 
+::: {style="font-size: 110%"}
 ``` stan
 // Priors
 mu_beta ~ cauchy(0, 5);
@@ -152,24 +181,38 @@ for (j in 1:J) {
   }
 }
 ```
+:::
 
 ## Convergence
 
-```{r}
-# targets::tar_read(plot_rhat_comparison)
-```
-
-## $\pi_{i, j(c)}$ as a Binary Variable -- Rasch
+![](figs/rhat_comparison.jpg)
 
 ## Binary Results - $\alpha$
 
 ```{r}
 
-p1 <- targets::tar_read(plot_rasch_binomial_partisans_colorado_adams_voters) +
-  labs(title = "Rasch Model")
+bin_1pl <- readRDS("fits/bin_1pl_colorado.rds")
+bin_2pl <- readRDS("fits/bin_2pl_colorado.rds")
 
-p2 <- targets::tar_read(plot_2pl_binomial_partisans_colorado_adams_voters) +
-  labs(title = "2PL Model")
+p1 <- bin_1pl |>
+ spread_draws(r_cvr_id[cvr_id, var]) |>
+ mutate(alpha = r_cvr_id/sd(r_cvr_id)) |>
+ filter(cvr_id < 4000) |>
+ ggplot(aes(x = alpha, y = as.character(cvr_id))) +
+ stat_halfeye() +
+ theme_bw() +
+ geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+ labs(x = expression(alpha), y = "Voter", title = "Binomial Rasch Model -- Latent Trait")
+
+p2 <- bin_2pl |> 
+  spread_draws(r_cvr_id__alpha[cvr_id,]) |> 
+  mutate(alpha = r_cvr_id__alpha/sd(r_cvr_id__alpha)) |> 
+  filter(cvr_id < 50) |> 
+  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
+  stat_halfeye() +
+  theme_bw() +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  labs(x = expression(alpha), y = "Voter", title = "Binomial 2PL Model -- Latent Trait")
 
 p1 + p2
 ```
@@ -178,18 +221,212 @@ p1 + p2
 
 ```{r}
 
-targets::tar_read(plot_2pl_binomial_partisans_colorado_adams_offices)
+person_pars_2pl <- ranef(bin_2pl, summary = FALSE)$cvr_id[, , "alpha_Intercept"] 
+person_sds_2pl <- apply(person_pars_2pl, 1, sd)
+item_pars_2pl <- coef(bin_2pl, summary = FALSE)$race
+  
+# locations
+beta <- item_pars_2pl[, , "beta_Intercept"] |>
+  posterior_summary() |>
+  as_tibble(rownames = "race")
+
+# slopes
+gamma <- item_pars_2pl[, , "loggamma_Intercept"] |>
+  exp() |>
+  sweep(1, person_sds_2pl, "*") |>
+  posterior_summary() |>
+  as_tibble(rownames = "race")
+
+random_races <- beta |> 
+  slice_sample(n=20) |> 
+  pull(race)
+
+bind_rows(beta, gamma, .id = "nlpar") |>
+  mutate(nlpar = factor(nlpar, labels = c("Easiness", "Discrimination"))) |> 
+  filter((race %in% random_races | race == "US PRESIDENT - STATEWIDE" | race == "US SENATE - STATEWIDE")) |> 
+  ggplot(aes(x = Estimate, y = race, xmin = Q2.5, xmax = Q97.5)) +
+  geom_pointrange() +
+  geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
+  facet_wrap("nlpar", scales = "free_x") +
+  labs(y = "") +
+  theme_bw()
 
 ```
 
-## $\pi_{i, j(c)}$ as a Categorical Variable -- Rasch
+## Categorical Results -- $\alpha$
 
-## Categorical Rasch Results
+```{r}
 
-## Categorical 2PL Results
+cat_1pl <- readRDS("fits/cat_1pl_new.rds")
+cat_2pl <- readRDS("fits/cat_2pl_new.rds")
 
-## Application to Representation
+p1 <- cat_1pl |> 
+  spread_draws(alpha[cvr_id]) |> 
+  mutate(alpha = alpha/sd(alpha)) |> 
+  filter(cvr_id < 15) |> 
+  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
+  stat_halfeye() +
+  theme_bw() +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  labs(x = expression(alpha), y = "Voter", title = "Categorical Rasch Model -- Latent Trait")
 
-Work with the binary 2PL results, since they are easiest to interpret
+p2 <- cat_2pl |> 
+  spread_draws(alpha[cvr_id]) |> 
+  mutate(alpha = alpha/sd(alpha)) |> 
+  filter(cvr_id < 15) |> 
+  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
+  stat_halfeye() +
+  theme_bw() +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  labs(x = expression(alpha), y = "Voter", title = "Categorical 2PL Model -- Latent Trait")
 
-## References {.r-fit-text}
+p1 + p2
+```
+
+## Categorical Results -- $\alpha$
+
+```{r}
+
+data <- tar_read(data_base_adams)
+
+df <- data |> 
+  # propositions are not quite right
+  mutate(candidate = case_when(
+    str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
+    TRUE ~ candidate
+  ))
+
+# Assign unique IDs to races and candidates
+races <- df |> 
+  distinct(race) |> 
+  arrange(race) |> 
+  mutate(race = str_remove(race, fixed(", ")),
+         race = str_squish(race)) |> 
+  mutate(race_id = row_number(),
+         race_id = as.character(race_id))
+
+candidates <- df |> 
+  distinct(race, candidate) |> 
+  arrange(race, candidate) |>
+  select(-race) |>
+  mutate(candidate_id = row_number(),
+         candidate_id = as.character(candidate_id))
+
+df <- df |> 
+  left_join(races, by = "race") |> 
+  left_join(candidates, by = "candidate")
+
+# some races are not classified perfectly in districts rn so they would show up as list-columns (bad)
+bad_races <- df |> 
+  count(cvr_id, race_id) |> 
+  filter(n > 1) |> 
+  distinct(race_id) |> 
+  pull(race_id)
+
+df <- df |> 
+  filter(!(race_id %in% bad_races)) |>
+  drop_na(race_id, candidate_id)
+
+pres_choices <- df |> 
+  filter(office == "US PRESIDENT") |> 
+  distinct(cvr_id, candidate) |> 
+  filter(candidate %in% c(
+    "KANYE WEST",
+    "JOSEPH R BIDEN",
+    "JO JORGENSEN",
+    "HOWIE HAWKINS",
+    "GLORIA LA RIVA",
+    "DONALD J TRUMP"
+  ))
+
+voters <- df |> 
+  select(cvr_id, race_id, candidate_id) |> 
+  arrange(race_id, candidate_id) |> 
+  distinct(cvr_id) |> 
+  mutate(id = row_number()) |> 
+  left_join(pres_choices)
+
+p1 <- cat_1pl |> 
+  spread_draws(alpha[id]) |> 
+  mutate(alpha = alpha/sd(alpha)) |> 
+  left_join(voters, join_by(id)) |> 
+  drop_na(candidate) |> 
+  ggplot(aes(x = alpha, fill = candidate, y = candidate)) +
+  ggridges::geom_density_ridges() +
+  theme_bw() +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  labs(x = expression(alpha), y = "", fill = "", title = "Categorical Rasch Model -- By Presidential Vote")
+
+p2 <- cat_2pl |> 
+  spread_draws(alpha[id]) |> 
+  mutate(alpha = alpha/sd(alpha)) |> 
+  left_join(voters, join_by(id)) |> 
+  drop_na(candidate) |> 
+  ggplot(aes(x = alpha, fill = candidate, y = candidate)) +
+  ggridges::geom_density_ridges() +
+  theme_bw() +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  labs(x = expression(alpha), y = "", fill = "", title = "Categorical 2PL Model -- By Presidential Vote")
+
+p1 + p2 + plot_layout(guides = "collect")
+
+```
+
+## Categorical Results - $\gamma$ 
+
+```{r}
+
+sds <- cat_2pl |> 
+  spread_draws(alpha[cvr_id]) |> 
+  ungroup() |> 
+  summarise(sd = sd(alpha), .by = ".draw") |> 
+  pull(sd)
+
+draws <- cat_2pl |> 
+  as_draws_df() |>
+  select(starts_with("beta["), starts_with("gamma[")) |> 
+  sweep(1, sds, "*") |> 
+  mutate(across(everything(), ~ na_if(.x, 0))) |> 
+  pivot_longer(cols = everything(), values_drop_na = TRUE)
+
+params <- draws |> 
+  separate_wider_delim(cols = name, delim = "[", names = c("parameter", "race_id")) |> 
+  separate_wider_delim(cols = race_id, delim = ",", names = c("race_id", "candidate_id")) |> 
+  mutate(candidate_id = str_remove(candidate_id, "]")) |> 
+  left_join(races) |> 
+  left_join(candidates)
+
+params |> 
+  filter(parameter == "gamma", str_detect(race, "US PRESIDENT|US HOUSE|US SENATE")) |> 
+  mutate(race = str_remove(race, " - STATEWIDE")) |> 
+  ggplot(aes(x = value, y = candidate)) +
+  stat_pointinterval() +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  facet_wrap(~ race, scales = "free") +
+  theme_bw() +
+  labs(x = expression(gamma), y = "")
+
+```
+
+## Categorical Results - $\beta$
+
+```{r}
+
+params |> 
+  filter(parameter == "beta", str_detect(race, "US PRESIDENT|US HOUSE|US SENATE")) |> 
+  mutate(race = str_remove(race, " - STATEWIDE")) |> 
+  ggplot(aes(x = value, y = candidate)) +
+  stat_pointinterval() +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  facet_wrap(~ race, scales = "free") +
+  theme_bw() +
+  labs(x = expression(beta), y = "")
+```
+
+## Future Work
+
+-   Informative priors from DIME or NOMINATE scores
+
+-   Multiple dimensions
+
+-   Connect this better to a question about representation
