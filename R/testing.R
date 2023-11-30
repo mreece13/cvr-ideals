@@ -444,26 +444,30 @@ fit_1pl <- brm(
   silent = 0
 )
 
-person_pars_1pl <- ranef(fit_1pl, summary = FALSE)$cvr_id[, , "Intercept"]
+## Rhat Plots
 
-person_sds_1pl <- apply(person_pars_1pl, 1, sd)
+cat_1pl <- readRDS("fits/cat_1pl_new.rds")
+cat_2pl <- readRDS("fits/cat_2pl_new.rds")
+bin_1pl <- readRDS("fits/bin_1pl_colorado.rds")
+bin_2pl <- readRDS("fits/bin_2pl_colorado.rds")
 
-person_pars_1pl <- person_pars_1pl |>
-  sweep(1, person_sds_1pl, "/") |>
-  posterior_summary() |>
-  as_tibble() |>
-  rownames_to_column(var = "cvr_id")
+fits <- list("Categorical, 1PL" = cat_1pl,
+             "Categorical, 2PL" = cat_2pl,
+             "Binomial, 1PL" = bin_1pl,
+             "Binomial, 2PL" = bin_2pl)
 
-person_pars_1pl |> 
-  ggplot(aes(x = Estimate)) +
-  geom_histogram() +
+rhats <- tibble(fit = fits, fit_name = names(fits)) |> 
+  mutate(rhat = map(fit, ~ select(summarise_draws(.x), rhat))) |> 
+  select(-fit) |> 
+  unnest(cols = rhat)
+
+p_rhats <- rhats |> 
+  ggplot(aes(x = rhat)) +
+  geom_dots() +
+  # geom_vline(xintercept = 1, color = "blue", linetype = "dashed") +
+  scale_y_continuous(labels = NULL) +
+  facet_wrap(~ fit_name, scales = "free_x", ncol=4) +
+  labs(x = expression(hat(R)), y = "", color = "Fit", title = "Distribution of Gelman-Rubin Diagnostic") +
   theme_bw()
 
-person_pars_1pl |>
-  slice_sample(n=15) |> 
-  arrange(Estimate) |>
-  ggplot(aes(cvr_id, Estimate, ymin = Q2.5, ymax = Q97.5)) +
-  geom_pointrange(alpha = 0.7) +
-  coord_flip() +
-  labs(x = "Person Number (sorted after Estimate)") +
-  theme_bw()
+ggsave("figs/rhat_comparison.jpg", plot = p_rhats, width = 8, height = 4, units = "in")
