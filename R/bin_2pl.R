@@ -2,7 +2,7 @@ library(tidyverse)
 library(brms)
 library(arrow)
 
-options("brms.threads" = 16)
+options("brms.threads" = 20)
 options("mc.cores" = 4)
 options("brms.backend" = "cmdstanr")
 options("future" = FALSE)
