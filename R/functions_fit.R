@@ -7,7 +7,7 @@ fit_binomial <- function(data, type){
   
   if (type == "rasch"){
     if (n_distinct(data$county_name) > 1){
-      form <- bf(choice_rep ~ county_name + (1 | office/district) + (1 | cvr_id))
+      form <- bf(choice_rep ~ (1 | county_name) + (1 | office/district) + (1 | cvr_id))
     } else {
       form <- bf(choice_rep ~ (1 | office/district) + (1 | cvr_id))
     }
@@ -16,8 +16,8 @@ fit_binomial <- function(data, type){
   if (type == "2pl"){
     if (n_distinct(data$county_name) > 1){
       form <- bf(choice_rep ~ exp(logalpha) * eta,
-                 eta ~ 1 + county_name + (1 | office/district) + (1 | cvr_id),
-                 logalpha ~ 1 + county_name + (1 | office/district),
+                 eta ~ 1 + (1 | county_name) + (1 | office/district) + (1 | cvr_id),
+                 logalpha ~ 1 + (1 | county_name) + (1 | office/district),
                  nl = TRUE)
     } else {
       form <- bf(choice_rep ~ exp(logalpha) * eta,
