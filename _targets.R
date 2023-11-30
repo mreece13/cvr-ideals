@@ -5,7 +5,7 @@ source("R/functions_data.R")
 source("R/functions_fit.R")
 source("R/functions_plot.R")
 
-options("brms.threads" = 16)
+options("brms.threads" = 20)
 options("mc.cores" = 4)
 options("brms.backend" = "cmdstanr")
 options("future" = FALSE)
