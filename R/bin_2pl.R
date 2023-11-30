@@ -81,19 +81,19 @@ prior_2pl <-
   prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
 
 # Add More Counties to 2PL
-brm(
-  formula = form_2pl,
-  prior = prior_2pl,
-  data = data_colorado,
-  chains = 4,
-  iter = 3000,
-  file = "fits/bin_2pl_colorado",
-  file_refit = "on_change",
-  sample_prior = TRUE,
-  seed = 02139,
-  silent = 0,
-  control = list(adapt_delta = 0.95)
-)
+# brm(
+#   formula = form_2pl,
+#   prior = prior_2pl,
+#   data = data_colorado,
+#   chains = 4,
+#   iter = 3000,
+#   file = "fits/bin_2pl_colorado",
+#   file_refit = "on_change",
+#   sample_prior = TRUE,
+#   seed = 02139,
+#   silent = 0,
+#   control = list(adapt_delta = 0.95)
+# )
 
 form_1pl <- bf(
   choice_rep ~ 1 + (1 | race) + (1 | cvr_id),
