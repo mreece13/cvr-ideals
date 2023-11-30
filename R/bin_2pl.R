@@ -64,21 +64,21 @@ data_colorado <- base_data |>
          !(office == "US HOUSE" & district == "57"),
          !(office == "US SENATE" & district == "8"))
 
-form_2pl <- bf(
-  choice_rep ~ beta + exp(loggamma) * alpha,
-  nl = TRUE,
-  alpha ~ 0 + (1 | cvr_id),
-  beta ~ 1 + (1 |i| race),
-  loggamma ~ 1 + (1 |i| race),
-  family = brmsfamily("bernoulli", link = "logit")
-)
-
-prior_2pl <- 
-  prior("normal(0, 2)", class = "b", nlpar = "beta") +
-  prior("normal(0, 1)", class = "b", nlpar = "loggamma") +
-  prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") + 
-  prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
-  prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
+# form_2pl <- bf(
+#   choice_rep ~ beta + exp(loggamma) * alpha,
+#   nl = TRUE,
+#   alpha ~ 0 + (1 | cvr_id),
+#   beta ~ 1 + (1 |i| race),
+#   loggamma ~ 1 + (1 |i| race),
+#   family = brmsfamily("bernoulli", link = "logit")
+# )
+# 
+# prior_2pl <- 
+#   prior("normal(0, 2)", class = "b", nlpar = "beta") +
+#   prior("normal(0, 1)", class = "b", nlpar = "loggamma") +
+#   prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") + 
+#   prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
+#   prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
 
 # Add More Counties to 2PL
 # brm(
@@ -95,23 +95,79 @@ prior_2pl <-
 #   control = list(adapt_delta = 0.95)
 # )
 
-form_1pl <- bf(
-  choice_rep ~ 1 + (1 | race) + (1 | cvr_id),
-  family = brmsfamily("bernoulli", link = "logit")
-)
+## Load DIME scores
 
-prior_1pl <- 
-  prior("normal(0, 2)", class = "Intercept") +
-  prior("normal(0, 3)", class = "sd", group = "cvr_id") + 
-  prior("normal(0, 3)", class = "sd", group = "race")
+# dime <- read_csv("data/dime_recipients_1979_2020.csv") |> 
+#   filter(str_detect(election, "2020"), (state == "CO" | seat == "federal:president")) |> 
+#   select(name, lname, ffname, fname, mname, party, seat, district, recipient.cfscore) |> 
+#   mutate(office = case_match(
+#     seat,
+#     "federal:house" ~ "US HOUSE",
+#     "federal:senate" ~ "US SENATE",
+#     "federal:president" ~ "US PRESIDENT",
+#     "state:upper" ~ "STATE SENATE",
+#     "state:lower" ~ "STATE HOUSE",
+#     "local:other" ~ NA,
+#     "state:treasurer" ~ NA,
+#     "state:governor" ~ NA,
+#     "local:district-attorney" ~ NA,
+#     "state:attorneyg" ~ NA,
+#     "state:education" ~ "BOARD OF EDUCATION",
+#     "state:office" ~ NA,
+#     "federal:committee" ~ NA,
+#     "federal:527" ~ NA,
+#     "state:ballot" ~ NA
+#   )) |> 
+#   drop_na(office) |> 
+#   mutate(district = case_when(
+#     office %in% c("US PRESIDENT", "US SENATE") ~ "STATEWIDE",
+#     office == "US HOUSE" ~ str_remove(district, "CO"),
+#     office %in% c("STATE HOUSE", "STATE SENATE", "BOARD OF EDUCATION") ~ str_remove(district, "CO-"),
+#     .default = NA
+#   )) |> 
+#   mutate(party_detailed = case_match(
+#     party,
+#     "100" ~ "DEMOCRAT",
+#     "200" ~ "REPUBLICAN",
+#     .default = NA
+#   ))
+
+# dime |> 
+#   write_csv("data/dime_colorado.csv")
+# 
+# data_colorado |> 
+#   distinct(office, district, candidate, party_detailed) |> 
+#   left_join(dime, join_by(office, district, party_detailed), "one-to-one") |> 
+#   write_csv("data/dime_raw_matches.csv")
+
+candidates_dime <- read_csv("~/cvrs/data/dime_matches.csv") |> 
+  distinct(office, district, candidate, .keep_all = TRUE) |> 
+  select(-party_detailed)
+
+data_colorado_dime <- data_colorado |> left_join(candidates_dime, join_by(office, district, candidate))
+
+form_1pl <- bf(
+  choice_rep ~ mi(recipient.cfscore) + (1 | race) + (1 | cvr_id),
+  family = brmsfamily("bernoulli", link = "logit")
+) +
+  bf(
+    recipient.cfscore | mi() ~ party_detailed,
+    family = brmsfamily("gaussian")
+  ) +
+  set_rescor(FALSE)
+
+# prior_1pl <- 
+#   prior("normal(0, 2)", class = "Intercept") +
+#   prior("normal(0, 3)", class = "sd", group = "cvr_id") + 
+#   prior("normal(0, 3)", class = "sd", group = "race")
 
 brm(
   formula = form_1pl,
-  prior = prior_1pl,
-  data = data_colorado,
+  # prior = prior_1pl,
+  data = data_colorado_dime,
   chains = 4,
   iter = 2000,
-  file = "fits/bin_1pl_colorado",
+  file = "fits/bin_1pl_colorado_dime",
   file_refit = "on_change",
   sample_prior = TRUE,
   seed = 02139,
