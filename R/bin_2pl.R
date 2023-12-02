@@ -151,7 +151,7 @@ form_1pl <- bf(
   family = brmsfamily("bernoulli", link = "logit")
 ) +
   bf(
-    recipient.cfscore | mi() ~ party_detailed,
+    recipient.cfscore | mi() ~ 1,
     family = brmsfamily("gaussian")
   ) +
   set_rescor(FALSE)
