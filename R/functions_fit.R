@@ -26,10 +26,10 @@ fit_bernoulli <- function(data, type){
     
     priors <-
       prior("normal(0, 2)", class = "b", nlpar = "beta") +
-      prior("normal(0, 1)", class = "b", nlpar = "gamma") +
+      prior("normal(0, 1)", class = "b", nlpar = "loggamma") +
       prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") +
       prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
-      prior("normal(0, 1)", class = "sd", group = "race", nlpar = "gamma")
+      prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
   }
   
   brm(
