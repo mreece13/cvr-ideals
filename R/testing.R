@@ -179,6 +179,8 @@ model$compile(
 fit <- model$sample(
   data = stan_data,
   chains = 4,
+  iter_sampling = 100,
+  iter_warmup = 50,
   seed = 02139,
   parallel_chains = 4,
   threads_per_chain = 20
@@ -192,8 +194,6 @@ fit |> summarise_draws(.cores = 4) |> filter(!str_detect(variable, "alpha")) |> 
 
 stan_data <- targets::tar_read(stan_data)
 data <- targets::tar_read(data_base_adams)
-
-targets::tar_read(plot_rhat_comparison)
 
 df <- data |> 
   # propositions are not quite right
@@ -248,60 +248,63 @@ joiner <- stan_data$candidates |>
 #   select(race_id, candidate_id, gamma) |>
 #   pivot_wider(names_from = candidate_id, values_from = gamma)
 
-gammas <- fit |>
+gamma_signs <- as_draws_df(fit) |>
+  select(matches("^gamma\\[")) |>
+  rowMeans() |>
+  sign()
+
+fit_flipped <- as_draws_df(fit) |>
+  mutate(across(matches("(^alpha\\[)|(^gamma\\[)|(^beta\\[)"), ~ gamma_signs * .))
+
+fit_flipped |>
+  posterior::subset_draws(variable = "(^alpha\\[)|(^gamma\\[)|(^beta\\[)", regex = TRUE) |>
+  summarise_draws() |>
+  summary()
+
+gammas_flipped <- fit_flipped |>
   spread_draws(gamma[race_id, candidate_id]) |>
   inner_join(joiner) |>
   left_join(races) |>
   left_join(candidates) |>
   ungroup()
 
-betas <- fit |>
-  spread_draws(beta[race_id]) |>
-  # inner_join(joiner) |>
+betas <- fit_flipped |>
+  spread_draws(beta[race_id, candidate_id]) |>
+  inner_join(joiner) |>
   left_join(races) |>
-  # left_join(candidates) |>
+  left_join(candidates) |>
   ungroup()
 
-gammas |>
-  filter(!str_detect(candidate, "PROPOSITION")) |>
-  ggplot(aes(x = gamma, y = candidate)) +
-  stat_pointinterval() +
+betas |>
+  filter(str_detect(race, "US PRESIDENT|US SENATE|US HOUSE")) |>
+  ggplot(aes(x = beta, y = candidate)) +
+  stat_halfeye() +
   geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
   facet_wrap(~ race, scales = "free") +
   # scale_x_continuous(limits = c(0, 15)) +
   theme_bw()
 
-alphas <- fit |> 
-  spread_draws(alpha[cvr_id])
-
-alphas |> 
-  # mutate(alpha = (alpha - mean(alpha))/sd(alpha)) |> 
-  left_join(votes_matrix, by = c("cvr_id" = "id")) |> 
-  # filter(cvr_id < 15) |> 
-  ggplot(aes(x = alpha, fill = as.character(trump_voter), group = as.character(trump_voter), color = as.character(trump_voter))) +
-  geom_density() +
-  geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
-  theme_bw()
-
-
-fit <- readRDS("fits/mnm_varying_1pl.rds")
-
-alphas |> 
-  filter(cvr_id < 10) |> 
-  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
+gammas_flipped |>
+  filter(str_detect(race, "US PRESIDENT|US SENATE|US HOUSE")) |>
+  ggplot(aes(x = gamma, y = candidate)) +
   stat_halfeye() +
-  theme_bw()
-
-
-betas |>
-  filter(!str_detect(race, "JUDGE")) |>
-  ggplot(aes(x = beta, y = race)) +
-  stat_pointinterval() +
   geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
-  # facet_wrap(~ race, scales = "free") +
+  facet_wrap(~ race, scales = "free") +
   # scale_x_continuous(limits = c(0, 15)) +
   theme_bw()
 
+alphas <- fit_flipped |> 
+  spread_draws(alpha[cvr_id])
+
+alphas |> 
+  ungroup() |> 
+  mutate(alpha = (alpha - mean(alpha))/sd(alpha)) |> 
+  # left_join(votes_matrix, by = c("cvr_id" = "id")) |> 
+  filter(cvr_id < 15) |>
+  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
+  stat_halfeye() +
+  geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
+  theme_bw()
 
 ########################
 
@@ -322,8 +325,7 @@ fit <- model$sample(
 
 fit$save_object("fits/cat_2pl.rds")
 
-
-fit <- targets::tar_read(fit_2pl_binomial_partisans_colorado_adams)
+fit <- readRDS("fits/cat_2pl.rds")
 
 data <- targets::tar_read(data_colorado_adams)
 data_all <- targets::tar_read(data_colorado)
@@ -357,7 +359,6 @@ fit_2pl <- brm(
   silent = 0,
   control = list(adapt_delta = 0.95)
 )
-
 
 ## Person Locations
 
@@ -446,15 +447,22 @@ fit_1pl <- brm(
 
 ## Rhat Plots
 
-cat_1pl <- readRDS("fits/cat_1pl_new.rds")
-cat_2pl <- readRDS("fits/cat_2pl_new.rds")
+# cat_1pl <- readRDS("fits/cat_1pl_new.rds")
+cat_2pl <- readRDS("fits/cat_2pl.rds")
 bin_1pl <- readRDS("fits/bin_1pl_colorado.rds")
 bin_2pl <- readRDS("fits/bin_2pl_colorado.rds")
 
-fits <- list("Categorical, 1PL" = cat_1pl,
-             "Categorical, 2PL" = cat_2pl,
-             "Binomial, 1PL" = bin_1pl,
-             "Binomial, 2PL" = bin_2pl)
+signs <- as_draws_df(cat_2pl) |>
+  select(matches("^gamma\\[")) |>
+  rowMeans() |>
+  sign()
+
+cat_2pl_flipped <- as_draws_df(cat_2pl) |>
+  mutate(across(matches("(^alpha\\[)|(^gamma\\[)|(^beta\\[)"), ~ gamma_signs * .))
+
+fits <- list("Categorical, 2PL" = cat_2pl_flipped,
+             "Bernoulli, 1PL" = bin_1pl,
+             "Bernoulli, 2PL" = bin_2pl)
 
 rhats <- tibble(fit = fits, fit_name = names(fits)) |> 
   mutate(rhat = map(fit, ~ select(summarise_draws(.x), rhat))) |> 
