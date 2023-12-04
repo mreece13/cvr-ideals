@@ -90,18 +90,30 @@ get_stan_data <- function(data){
       str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
       TRUE ~ candidate
     ),
-    race = str_remove(race, ", "))
+    race = str_remove(race, ", "),
+    candidate_order = case_match(
+      candidate,
+      "JOSEPH R BIDEN" ~ 1,
+      "DONALD J TRUMP" ~ 2,
+      .default = 3
+    ),
+    race_order = case_match(
+      office,
+      "US PRESIDENT" ~ 1,
+      .default = 2
+    ))
   
   # Assign unique IDs to races and candidates
   races <- df |> 
-    distinct(race) |> 
-    arrange(race) |> 
+    distinct(race, race_order) |> 
+    arrange(race_order, race) |> 
+    select(race) |> 
     mutate(race_id = row_number())
   
   candidates <- df |> 
-    distinct(race, candidate) |> 
-    arrange(race, candidate) |>
-    select(-race) |>
+    distinct(race_order, race, candidate_order, candidate) |> 
+    arrange(race_order, race, candidate_order, candidate) |>
+    select(candidate) |>
     mutate(candidate_id = row_number())
   
   # Create the candidate availability matrix
