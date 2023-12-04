@@ -18,7 +18,7 @@ partial_schema <- schema(
   field("party_detailed", string())
 )
 
-base_data <- open_dataset("~/cvrs/data/cvr_qa_main",
+base_data <- open_dataset("../cvrs/data/cvr_qa_main",
                           partitioning = "state",
                           schema = partial_schema,
                           format = "parquet") |> 
@@ -45,7 +45,7 @@ contested_races <- inner_join(contested_races, partisan_races)
 randoms <- base_data |>
   distinct(county_name, cvr_id) |>
   collect() |> 
-  slice_sample(n=25000)
+  slice_sample(n=250)
 
 data_colorado <- base_data |> 
   inner_join(randoms, by = c("county_name", "cvr_id")) |>
@@ -64,14 +64,17 @@ data_colorado <- base_data |>
          !(office == "US HOUSE" & district == "57"),
          !(office == "US SENATE" & district == "8"))
 
-# form_2pl <- bf(
-#   choice_rep ~ beta + exp(loggamma) * alpha,
-#   nl = TRUE,
-#   alpha ~ 0 + (1 | cvr_id),
-#   beta ~ 1 + (1 |i| race),
-#   loggamma ~ 1 + (1 |i| race),
-#   family = brmsfamily("bernoulli", link = "logit")
-# )
+form_2pl <- bf(
+  choice_rep ~ gamma * alpha - beta,
+  nl = TRUE,
+  alpha ~ 0 + (1 | cvr_id),
+  beta ~ 1 + (1 |i| race),
+  gamma ~ 1 + (1 |i| race),
+  family = brmsfamily("categorical", link = "logit")
+)
+
+get_prior(form_2pl, data = data_colorado)
+
 # 
 # prior_2pl <- 
 #   prior("normal(0, 2)", class = "b", nlpar = "beta") +
@@ -81,19 +84,20 @@ data_colorado <- base_data |>
 #   prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
 
 # Add More Counties to 2PL
-# brm(
-#   formula = form_2pl,
-#   prior = prior_2pl,
-#   data = data_colorado,
-#   chains = 4,
-#   iter = 3000,
-#   file = "fits/bin_2pl_colorado",
-#   file_refit = "on_change",
-#   sample_prior = TRUE,
-#   seed = 02139,
-#   silent = 0,
-#   control = list(adapt_delta = 0.95)
-# )
+brm(
+  formula = form_2pl,
+  # prior = prior_2pl,
+  data = data_colorado,
+  chains = 4,
+  iter = 0,
+  file = "fits/bin_2pl_colorado",
+  file_refit = "on_change",
+  sample_prior = TRUE,
+  seed = 02139,
+  silent = 0
+)
+
+make_stancode(form_2pl, data_colorado)
 
 ## Load DIME scores
 

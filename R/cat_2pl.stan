@@ -52,7 +52,7 @@ parameters {
   real mu_beta; // mean question difficulty
   array[J] real alpha; // latent ability of voter j - mean latent ability
   array[K, C] real beta_raw;  // difficulty for each race
-  array[K, C] real<lower=0> gamma_raw; // discrimination for each race
+  array[K, C] real gamma_raw; // discrimination for each race
   real<lower=0> sigma_beta; // scale of difficulties
   real<lower=0> sigma_gamma; // scale of log discrimination
 }
@@ -78,16 +78,16 @@ transformed parameters {
 
 model {
   // Priors
-  mu_beta ~ cauchy(0, 5);
+  mu_beta ~ student_t(3, 0, 2.5);
   alpha ~ std_normal(); // set to N(0, 1) for identification
   
   for (k in 1:K){
     beta_raw[k,] ~ normal(0, sigma_beta);
-    gamma_raw[k,] ~ lognormal(0, sigma_gamma);
+    gamma_raw[k,] ~ normal(0, sigma_gamma);
   }
   
-  sigma_beta ~ cauchy(0, 5);
-  sigma_gamma ~ cauchy(0, 5);
+  sigma_beta ~ student_t(3, 0, 2.5);
+  sigma_gamma ~ student_t(3, 0, 2.5);
   
   if (parallelize == 0){
     // Likelihood
