@@ -55,6 +55,11 @@ parameters {
   array[K, C] real gamma_raw; // discrimination for each race
   real<lower=0> sigma_beta; // scale of difficulties
   real<lower=0> sigma_gamma; // scale of log discrimination
+  
+  // fix trump parameter to be greater than 0, 
+  // with biden set as reference this imposes ordering constraint
+  array[1, 1] real<lower=0> gamma_trump; 
+  array[1, 1] real<lower=0> beta_trump; 
 }
 
 transformed parameters {
@@ -68,8 +73,14 @@ transformed parameters {
         if (reference == 1){
           reference = 0;
         } else {
-          beta[k, c] = beta_raw[k, c];
-          gamma[k, c] = gamma_raw[k, c];
+          if (k == 1 && c == 2){
+            beta[k, c] = beta_trump[1, 1];
+            gamma[k, c] = gamma_trump[1, 1];
+          } else {
+            beta[k, c] = beta_raw[k, c];
+            gamma[k, c] = gamma_raw[k, c];
+          }
+          
         }
       }
     }

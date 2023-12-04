@@ -89,7 +89,8 @@ get_stan_data <- function(data){
     mutate(candidate = case_when(
       str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
       TRUE ~ candidate
-    ))
+    ),
+    race = str_remove(race, ", "))
   
   # Assign unique IDs to races and candidates
   races <- df |> 
@@ -145,6 +146,8 @@ get_stan_data <- function(data){
     votes_matrix[, missing] <- 0
     votes_matrix <- relocate(votes_matrix, all_of(as.character(races$race_id))) |> 
       as.matrix()
+  } else {
+    votes_matrix <- as.matrix(votes_matrix)
   }
   
   eligibility_matrix <- ifelse(votes_matrix > 0, 1, 0)
