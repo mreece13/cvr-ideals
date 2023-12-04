@@ -1,41 +1,47 @@
 # R/functions_fit.R
 
-# 1PL Rasch Model with intercept and random effects for nested districts within offices
-# also include random effect for individuals
-
-fit_binomial <- function(data, type){
+fit_bernoulli <- function(data, type){
   
   if (type == "rasch"){
-    if (n_distinct(data$county_name) > 1){
-      form <- bf(choice_rep ~ (1 | county_name) + (1 | office/district) + (1 | cvr_id))
-    } else {
-      form <- bf(choice_rep ~ (1 | office/district) + (1 | cvr_id))
-    }
+    form <- bf(
+      choice_rep ~ 1 + (1 | race) + (1 | cvr_id),
+      family = brmsfamily("bernoulli", link = "logit")
+    )
+    
+    priors <-
+      prior("normal(0, 2)", class = "Intercept") +
+      prior("normal(0, 3)", class = "sd", group = "cvr_id") +
+      prior("normal(0, 3)", class = "sd", group = "race")
   }
   
   if (type == "2pl"){
-    if (n_distinct(data$county_name) > 1){
-      form <- bf(choice_rep ~ exp(logalpha) * eta,
-                 eta ~ 1 + (1 | county_name) + (1 | office/district) + (1 | cvr_id),
-                 logalpha ~ 1 + (1 | county_name) + (1 | office/district),
-                 nl = TRUE)
-    } else {
-      form <- bf(choice_rep ~ exp(logalpha) * eta,
-                 eta ~ 1 + (1 | office/district) + (1 | cvr_id),
-                 logalpha ~ 1 + (1 | office/district),
-                 nl = TRUE)
-    }
+    form <- bf(
+      choice_rep ~ gamma * alpha - beta,
+      nl = TRUE,
+      alpha ~ 0 + (1 | cvr_id),
+      beta ~ 1 + (1 |i| race),
+      gamma ~ 1 + (1 |i| race),
+      family = brmsfamily("bernoulli", link = "logit")
+    )
+    
+    priors <-
+      prior("normal(0, 2)", class = "b", nlpar = "beta") +
+      prior("normal(0, 1)", class = "b", nlpar = "gamma") +
+      prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") +
+      prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
+      prior("normal(0, 1)", class = "sd", group = "race", nlpar = "gamma")
   }
   
   brm(
     formula = form,
-    family = bernoulli(),
+    prior = priors,
     data = data,
     chains = 4,
     iter = 2000,
     seed = 02139,
     silent = 0,
-    control = list(adapt_delta = 0.95)
+    file = str_c("fits/bernoulli_", type),
+    file_refit = "on_change"
   )
   
 }

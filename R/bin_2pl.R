@@ -161,10 +161,10 @@ form_1pl <- bf(
   ) +
   set_rescor(FALSE)
 
-# prior_1pl <- 
-#   prior("normal(0, 2)", class = "Intercept") +
-#   prior("normal(0, 3)", class = "sd", group = "cvr_id") + 
-#   prior("normal(0, 3)", class = "sd", group = "race")
+prior_1pl <-
+  prior("normal(0, 2)", class = "Intercept") +
+  prior("normal(0, 3)", class = "sd", group = "cvr_id") +
+  prior("normal(0, 3)", class = "sd", group = "race")
 
 brm(
   formula = form_1pl,
@@ -174,7 +174,6 @@ brm(
   iter = 2000,
   file = "fits/bin_1pl_colorado_dime",
   file_refit = "on_change",
-  sample_prior = TRUE,
   seed = 02139,
   silent = 0
 )
