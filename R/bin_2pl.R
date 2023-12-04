@@ -74,14 +74,15 @@ form_2pl <- bf(
 )
 
 get_prior(form_2pl, data = data_colorado)
+make_stancode(form_2pl, data = data_colorado, prior = prior_2pl)
 
-# 
-# prior_2pl <- 
-#   prior("normal(0, 2)", class = "b", nlpar = "beta") +
-#   prior("normal(0, 1)", class = "b", nlpar = "loggamma") +
-#   prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") + 
-#   prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
-#   prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
+
+prior_2pl <-
+  prior("normal(0, 2)", class = "b", nlpar = "beta") +
+  prior("normal(0, 1)", class = "b", nlpar = "gamma") +
+  prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") +
+  prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
+  prior("normal(0, 1)", class = "sd", group = "race", nlpar = "gamma")
 
 # Add More Counties to 2PL
 brm(
