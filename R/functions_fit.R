@@ -16,11 +16,11 @@ fit_bernoulli <- function(data, type){
   
   if (type == "2pl"){
     form <- bf(
-      choice_rep ~ gamma * alpha - beta,
+      choice_rep ~ loggamma * alpha - beta,
       nl = TRUE,
       alpha ~ 0 + (1 | cvr_id),
       beta ~ 1 + (1 |i| race),
-      gamma ~ 1 + (1 |i| race),
+      loggamma ~ 1 + (1 |i| race),
       family = brmsfamily("bernoulli", link = "logit")
     )
     
