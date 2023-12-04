@@ -59,7 +59,7 @@ parameters {
 
 transformed parameters {
   array[K, C] real beta = rep_array(0, K, C);  // difficulty for each race
-  array[K, C] real<lower=0> gamma = rep_array(0, K, C); // discrimination for each race
+  array[K, C] real gamma = rep_array(0, K, C); // discrimination for each race
   
   for (k in 1:K){
     int reference = 1;
