@@ -81,13 +81,11 @@ model {
   mu_beta ~ student_t(3, 0, 2.5);
   alpha ~ std_normal(); // set to N(0, 1) for identification
   
-  for (k in 1:K){
-    beta_raw[k,] ~ normal(0, sigma_beta);
-    gamma_raw[k,] ~ normal(0, sigma_gamma);
-  }
-  
   sigma_beta ~ student_t(3, 0, 2.5);
   sigma_gamma ~ student_t(3, 0, 2.5);
+  
+  beta_raw ~ student_t(3, 0, sigma_beta);
+  gamma_raw ~ student_t(3, 0, sigma_gamma);
   
   if (parallelize == 0){
     // Likelihood
