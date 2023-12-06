@@ -95,6 +95,14 @@ Nonparametric Ideal-Point Estimation and Inference Alexander Tahk
 
 Extension to modeling races with magnitude \> 1
 
+Group voters together into similar patterns, makes more possible to estimate
+
+Only work with binomial model and figure out next steps from there
+
+Add covariates to inform locations of candidates
+
+Cutpoint should be better identified
+
 \newpage
 
 # References
