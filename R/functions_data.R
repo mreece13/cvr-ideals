@@ -82,6 +82,23 @@ pick_random_voters <- function(data, n){
   slice_sample(distinct(data, cvr_id), n=n)
 }
 
+group_voters <- function(data){
+  
+  data |> 
+    arrange(race, candidate) |> 
+    mutate(choice = str_c(race, candidate, choice_rep, sep = "|")) |> 
+    select(state, county_name, cvr_id, choice) |> 
+    nest(data = choice) |> 
+    mutate(pattern = map_chr(data, ~ str_flatten(pull(.x, choice), collapse = "||")))
+  
+  uniques |> 
+    left_join(count(uniques, pattern) |> mutate(group_id = row_number())) |> 
+    select(state, county_name, data, n, group_id) |> 
+    unnest(cols = data) |> 
+    separate_wider_delim(choice, delim = "|", names = c("race", "candidate", "choice_rep"))
+  
+}
+
 get_stan_data <- function(data){
   
   df <- data |> 

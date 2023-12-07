@@ -4,21 +4,21 @@ fit_bernoulli <- function(data, type){
   
   if (type == "rasch"){
     form <- bf(
-      choice_rep ~ 1 + (1 | race) + (1 | cvr_id),
+      choice_rep | weights(n) ~ 1 + (1 | race) + (1 | group_id),
       family = brmsfamily("bernoulli", link = "logit")
     )
     
     priors <-
       prior("normal(0, 2)", class = "Intercept") +
-      prior("normal(0, 3)", class = "sd", group = "cvr_id") +
+      prior("normal(0, 3)", class = "sd", group = "group_id") +
       prior("normal(0, 3)", class = "sd", group = "race")
   }
   
   if (type == "2pl"){
     form <- bf(
-      choice_rep ~ exp(loggamma) * alpha - beta,
+      choice_rep | weights(n) ~ exp(loggamma) * alpha - beta,
       nl = TRUE,
-      alpha ~ 0 + (1 | cvr_id),
+      alpha ~ 0 + (1 | group_id),
       beta ~ 1 + (1 |i| race),
       loggamma ~ 1 + (1 |i| race),
       family = brmsfamily("bernoulli", link = "logit")
@@ -27,7 +27,7 @@ fit_bernoulli <- function(data, type){
     priors <-
       prior("normal(0, 2)", class = "b", nlpar = "beta") +
       prior("normal(0, 1)", class = "b", nlpar = "loggamma") +
-      prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") +
+      prior("normal(0, 1)", class = "sd", group = "group_id", nlpar = "alpha") +
       prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
       prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
   }
@@ -40,7 +40,7 @@ fit_bernoulli <- function(data, type){
     iter = 2000,
     seed = 02139,
     silent = 0,
-    file = str_c("fits/bernoulli_", type),
+    file = str_c("fits/bernoulli_", type, "_grouped"),
     file_refit = "on_change"
   )
   
