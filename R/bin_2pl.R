@@ -45,7 +45,7 @@ contested_races <- inner_join(contested_races, partisan_races)
 randoms <- base_data |>
   distinct(county_name, cvr_id) |>
   collect() |> 
-  slice_sample(n=250)
+  slice_sample(n=1000)
 
 data_colorado <- base_data |> 
   inner_join(randoms, by = c("county_name", "cvr_id")) |>
@@ -63,42 +63,6 @@ data_colorado <- base_data |>
   filter(!(office == "US HOUSE" & district == "STATEWIDE"), 
          !(office == "US HOUSE" & district == "57"),
          !(office == "US SENATE" & district == "8"))
-
-form_2pl <- bf(
-  choice_rep ~ gamma * alpha - beta,
-  nl = TRUE,
-  alpha ~ 0 + (1 | cvr_id),
-  beta ~ 1 + (1 |i| race),
-  gamma ~ 1 + (1 |i| race),
-  family = brmsfamily("categorical", link = "logit")
-)
-
-get_prior(form_2pl, data = data_colorado)
-make_stancode(form_2pl, data = data_colorado, prior = prior_2pl)
-
-
-prior_2pl <-
-  prior("normal(0, 2)", class = "b", nlpar = "beta") +
-  prior("normal(0, 1)", class = "b", nlpar = "gamma") +
-  prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") +
-  prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
-  prior("normal(0, 1)", class = "sd", group = "race", nlpar = "gamma")
-
-# Add More Counties to 2PL
-brm(
-  formula = form_2pl,
-  # prior = prior_2pl,
-  data = data_colorado,
-  chains = 4,
-  iter = 0,
-  file = "fits/bin_2pl_colorado",
-  file_refit = "on_change",
-  sample_prior = TRUE,
-  seed = 02139,
-  silent = 0
-)
-
-make_stancode(form_2pl, data_colorado)
 
 ## Load DIME scores
 
@@ -145,35 +109,41 @@ make_stancode(form_2pl, data_colorado)
 #   left_join(dime, join_by(office, district, party_detailed), "one-to-one") |> 
 #   write_csv("data/dime_raw_matches.csv")
 
-candidates_dime <- read_csv("~/cvrs/data/dime_matches.csv") |> 
+candidates_dime <- read_csv("data/dime_matches.csv") |> 
   distinct(office, district, candidate, .keep_all = TRUE) |> 
   select(-party_detailed)
 
-data_colorado_dime <- data_colorado |> left_join(candidates_dime, join_by(office, district, candidate))
+data_colorado_dime <- data_colorado |> 
+  left_join(candidates_dime, join_by(office, district, candidate)) |>
+  drop_na(recipient.cfscore) |> 
+  mutate(recipient.cfscore = (recipient.cfscore-min(recipient.cfscore))/(max(recipient.cfscore)-min(recipient.cfscore)))
 
 form_1pl <- bf(
-  choice_rep ~ mi(recipient.cfscore) + (1 | race) + (1 | cvr_id),
+  choice_rep ~ recipient.cfscore + (1 | race) + (1 | cvr_id),
   family = brmsfamily("bernoulli", link = "logit")
-) +
-  bf(
-    recipient.cfscore | mi() ~ 1,
-    family = brmsfamily("gaussian")
-  ) +
-  set_rescor(FALSE)
+)
 
 prior_1pl <-
   prior("normal(0, 2)", class = "Intercept") +
   prior("normal(0, 3)", class = "sd", group = "cvr_id") +
   prior("normal(0, 3)", class = "sd", group = "race")
 
-brm(
+fit <- brm(
   formula = form_1pl,
-  # prior = prior_1pl,
+  prior = prior_1pl,
   data = data_colorado_dime,
   chains = 4,
   iter = 2000,
-  file = "fits/bin_1pl_colorado_dime",
+  file = "fits/bernoulli_rasch_dime",
   file_refit = "on_change",
   seed = 02139,
   silent = 0
 )
+
+fit |> 
+  spread_draws(b_recipient.cfscore) |> 
+  ggplot(aes(x = b_recipient.cfscore)) +
+  stat_halfeye() +
+  theme_bw()
+
+conditional_effects(fit, effects = "recipient.cfscore")
