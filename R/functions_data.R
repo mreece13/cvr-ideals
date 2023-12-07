@@ -84,7 +84,7 @@ pick_random_voters <- function(data, n){
 
 group_voters <- function(data){
   
-  data |> 
+  uniques <- data |> 
     arrange(race, candidate) |> 
     mutate(choice = str_c(race, candidate, choice_rep, sep = "|")) |> 
     select(state, county_name, cvr_id, choice) |> 
