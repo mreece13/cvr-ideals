@@ -7,211 +7,39 @@ library(cmdstanr)
 library(tidybayes)
 library(bayesplot)
 library(arrow)
-
-### NEW VERSION ACCOUNTING FOR VARYING CHOICES
-
-partial_schema <- schema(
-  field("state", string()),
-  field("cvr_id", string()),
-  field("county_name", string()),
-  field("candidate", string()),
-  field("district", string()),
-  field("magnitude", string()),
-  field("office", string()),
-  field("party_detailed", string())
-)
-
-base <- open_dataset("../cvrs/data/cvr_qa_main",
-                          partitioning = "state",
-                          schema = partial_schema,
-                          format = "parquet") |> 
-  filter(state == "COLORADO", county_name == "ADAMS", !is.na(office), !is.na(district)) |> 
-  select(-magnitude) |> 
-  mutate(race = str_c(office, district, sep = " - "),
-         race = str_remove(race, fixed(", "))) |> 
-  # propositions are not quite right
-  mutate(candidate = case_when(
-    str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
-    TRUE ~ candidate
-  )) |> 
-  collect()
-  
-## Filter to top 2 candidates in each race
-# top_cands <- base |>
-#   count(race, candidate) |>
-#   arrange(race, desc(n)) |>
-#   slice_head(n=2, by = race) |>
-#   select(-n)
-# 
-# base <- inner_join(base, top_cands)
-
-races <- base |> 
-  distinct(race) |> 
-  arrange(race) |> 
-  mutate(race_id = row_number())
-
-candidates <- base |> 
-  distinct(race, candidate) |> 
-  arrange(race, candidate) |>
-  select(-race) |>
-  mutate(candidate_id = row_number())
-
-# Create the candidate availability matrix
-candidate_availability <- base |> 
-  summarize(available = n() > 0, .by = c(race, candidate)) |> 
-  left_join(races, by = "race") |> 
-  left_join(candidates, by = "candidate") |> 
-  select(-race, -candidate) |> 
-  drop_na(race_id, candidate_id) |> 
-  complete(race_id, candidate_id, fill = list(available = FALSE)) |> 
-  pivot_wider(names_from = candidate_id, values_from = available) |> 
-  select(-race_id) |> 
-  mutate(across(everything(), as.numeric)) |> 
-  as.matrix()
-
-df <- base |> 
-  left_join(races, by = "race") |> 
-  left_join(candidates, by = "candidate")
-
-# some races are not classified perfectly in districts rn so they would show up as list-columns (bad)
-bad_races <- df |> 
-  count(cvr_id, race_id) |> 
-  filter(n > 1) |> 
-  distinct(race_id) |> 
-  pull(race_id)
-
-randos <- df |> 
-  distinct(cvr_id) |> 
-  slice_sample(n=100)
-
-df <- df |> 
-  inner_join(randos) |> 
-  filter(!(race_id %in% bad_races)) |>
-  drop_na(race_id, candidate_id)
-
-# Create the votes matrix
-votes_matrix <- df |> 
-  select(cvr_id, race_id, candidate_id) |> 
-  arrange(race_id, candidate_id) |>
-  pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |> 
-  select(-cvr_id)
-
-missing <- setdiff(races$race_id, colnames(votes_matrix)) |> as.character()
-
-if (length(missing) > 0){
-  votes_matrix[, missing] <- 0
-  votes_matrix <- relocate(votes_matrix, all_of(as.character(races$race_id))) |> 
-    as.matrix()
-}
-
-eligibility_matrix <- ifelse(votes_matrix > 0, 1, 0)
-
-# Prepare data for Stan
-stan_data <- list(
-  J = n_distinct(df$cvr_id),
-  K = max(races$race_id),
-  C = max(candidates$candidate_id),
-  candidates = candidate_availability,
-  eligibility = eligibility_matrix,
-  votes = votes_matrix,
-  parallelize = 1
-)
-
-rm(base, candidates, candidate_availability, df, eligibility_matrix, races, 
-   randos, votes_matrix, bad_races, missing, partial_schema)
-gc()
-
-## Optimized 2PL
-
-# model <- cmdstan_model("R/mnm_varying_2pl_optimized.stan", compile = FALSE)
-# model$compile(
-#   cpp_options = list(stan_threads = TRUE)
-# )
-# 
-# fit <- model$sample(
-#   data = stan_data,
-#   # chains = 2,
-#   # iter_warmup = 100,
-#   # iter_sampling = 400,
-#   seed = 02139,
-#   parallel_chains = 4,
-#   threads_per_chain = 16
-# )
-# 
-# fit$save_object("fits/cat_2pl.rds")
-
-## Fit Diagnostics
-# 
-# fit <- readRDS("fits/cat_2pl.rds")
-# 
-# rhat(fit)
-# 
-# draws <- fit$draws() |>
-#   as_tibble() |>
-#   select(contains("alpha"), contains("beta"), contains("gamma")) |>
-#   mutate(across(everything(), ~ if_else(.x < 0.01, NA, .x)))
-# 
-# fit |>
-#   spread_draws(alpha[cvr_id], gamma[race_id]) |>
-#   ungroup() |>
-#   filter(cvr_id < 10) |>
-#   # filter(gamma > 0.05) |>
-#   # left_join(races, join_by(race_id)) |>
-#   # filter(race != "COUNTY JUDGE - ADAMS") |>
-#   ggplot(aes(x = alpha, y = as.character(cvr_id))) +
-#   stat_halfeye() +
-#   geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
-#   # scale_x_continuous(limits = c(0, 15)) +
-#   theme_bw()
-# 
-# mcmc_pairs(fit$draws(), pars = vars("alpha[1]", "alpha[2]", "alpha[3]",
-#                                     "gamma[40]", "gamma[2]", "gamma[3]",
-#                                   "beta[40]", "beta[2]", "beta[3]"))
-
-
-## 2PL with parameters that vary by candidate
-
-model <- cmdstan_model("R/cat_2pl.stan", compile = FALSE)
-model$compile(
-  cpp_options = list(stan_threads = TRUE)
-)
-
-fit <- model$sample(
-  data = stan_data,
-  chains = 4,
-  iter_sampling = 100,
-  iter_warmup = 50,
-  seed = 02139,
-  parallel_chains = 4,
-  threads_per_chain = 20
-)
-
-fit$save_object("fits/cat_2pl_2.rds")
-
-fit <- readRDS("fits/cat_2pl.rds")
-
-fit |> summarise_draws(.cores = 4) |> filter(!str_detect(variable, "alpha")) |> summary()
+library(brms)
 
 stan_data <- targets::tar_read(stan_data)
-data <- targets::tar_read(data_base_adams)
-
-df <- data |> 
+data <- targets::tar_read(data_base_adams) |> 
   # propositions are not quite right
   mutate(candidate = case_when(
     str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
     TRUE ~ candidate
+  ),
+  race = str_remove(race, ", "),
+  candidate_order = case_match(
+    candidate,
+    "JOSEPH R BIDEN" ~ 1,
+    "DONALD J TRUMP" ~ 2,
+    .default = 3
+  ),
+  race_order = case_match(
+    office,
+    "US PRESIDENT" ~ 1,
+    .default = 2
   ))
 
 # Assign unique IDs to races and candidates
 races <- df |> 
-  distinct(race) |> 
-  arrange(race) |> 
+  distinct(race, race_order) |> 
+  arrange(race_order, race) |> 
+  select(race) |> 
   mutate(race_id = row_number())
 
 candidates <- df |> 
-  distinct(race, candidate) |> 
-  arrange(race, candidate) |>
-  # select(-race) |>
+  distinct(race_order, race, candidate_order, candidate) |> 
+  arrange(race_order, race, candidate_order, candidate) |>
+  select(candidate) |>
   mutate(candidate_id = row_number())
 
 bad_races <- df |> 
@@ -241,12 +69,7 @@ joiner <- stan_data$candidates |>
   mutate(across(everything(), as.numeric)) |> 
   filter(!(race_id %in% bad_races))
 
-# t <- fit |>
-#   spread_draws(gamma[race_id, candidate_id], ndraws = 1)
-# 
-# t |>
-#   select(race_id, candidate_id, gamma) |>
-#   pivot_wider(names_from = candidate_id, values_from = gamma)
+fit <- readRDS("fits/cat_2pl_unrestricted.rds")
 
 gamma_signs <- as_draws_df(fit) |>
   select(matches("^gamma\\[")) |>
@@ -254,14 +77,9 @@ gamma_signs <- as_draws_df(fit) |>
   sign()
 
 fit_flipped <- as_draws_df(fit) |>
-  mutate(across(matches("(^alpha\\[)|(^gamma\\[)|(^beta\\[)"), ~ gamma_signs * .))
+  mutate(across(matches("(^alpha\\[)|(^gamma\\[)"), ~ gamma_signs * .))
 
-fit_flipped |>
-  posterior::subset_draws(variable = "(^alpha\\[)|(^gamma\\[)|(^beta\\[)", regex = TRUE) |>
-  summarise_draws() |>
-  summary()
-
-gammas_flipped <- fit_flipped |>
+gammas <- fit_flipped |>
   spread_draws(gamma[race_id, candidate_id]) |>
   inner_join(joiner) |>
   left_join(races) |>
@@ -284,7 +102,7 @@ betas |>
   # scale_x_continuous(limits = c(0, 15)) +
   theme_bw()
 
-gammas_flipped |>
+gammas |>
   filter(str_detect(race, "US PRESIDENT|US SENATE|US HOUSE")) |>
   ggplot(aes(x = gamma, y = candidate)) +
   stat_halfeye() +
@@ -306,151 +124,12 @@ alphas |>
   geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
   theme_bw()
 
-########################
-
-model <- cmdstan_model("R/cat_1pl.stan", compile = FALSE)
-model$compile(
-  cpp_options = list(stan_threads = TRUE)
-)
-
-fit <- model$sample(
-  data = stan_data,
-  # chains = 2,
-  # iter_warmup = 100,
-  # iter_sampling = 400,
-  seed = 02139,
-  parallel_chains = 4,
-  threads_per_chain = 2
-)
-
-fit$save_object("fits/cat_2pl.rds")
-
-fit <- readRDS("fits/cat_2pl.rds")
-
-data <- targets::tar_read(data_colorado_adams)
-data_all <- targets::tar_read(data_colorado)
-
-form_2pl <- bf(
-  choice_rep ~ beta + exp(loggamma) * alpha,
-  nl = TRUE,
-  alpha ~ 0 + (1 | cvr_id),
-  beta ~ 1 + (1 |i| race),
-  loggamma ~ 1 + (1 |i| race),
-  family = brmsfamily("bernoulli", link = "logit")
-)
-
-prior_2pl <- 
-  prior("normal(0, 2)", class = "b", nlpar = "beta") +
-  prior("normal(0, 1)", class = "b", nlpar = "loggamma") +
-  prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") + 
-  prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
-  prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
-
-fit_2pl <- brm(
-  formula = form_2pl,
-  prior = prior_2pl,
-  data = data,
-  chains = 4,
-  iter = 2000,
-  file = "fits/bin_2pl",
-  file_refit = "on_change",
-  sample_prior = TRUE,
-  seed = 02139,
-  silent = 0,
-  control = list(adapt_delta = 0.95)
-)
-
-## Person Locations
-
-person_pars_2pl <- ranef(fit_2pl, summary = FALSE)$cvr_id[, , "alpha_Intercept"] 
-
-person_sds_2pl <- apply(person_pars_2pl, 1, sd)
-
-person_pars_2pl <- person_pars_2pl |>
-  sweep(1, person_sds_2pl, "/") |>
-  posterior_summary() |>
-  as_tibble() |>
-  rownames_to_column(var = "cvr_id")
-
-person_pars_2pl |> 
-  ggplot(aes(x = Estimate)) +
-  geom_histogram() +
-  theme_bw()
-
-person_pars_2pl |>
-  slice_sample(n=15) |> 
-  arrange(Estimate) |>
-  mutate(id2 = seq_len(n())) |>
-  ggplot(aes(cvr_id, Estimate, ymin = Q2.5, ymax = Q97.5)) +
-  geom_pointrange(alpha = 0.7) +
-  coord_flip() +
-  labs(x = "Person Number (sorted after Estimate)") +
-  theme_bw()
-
-## Race Locations
-
-item_pars_2pl <- coef(fit_2pl, summary = FALSE)$race
-
-# locations
-beta <- item_pars_2pl[, , "beta_Intercept"] |>
-  posterior_summary() |>
-  as_tibble() |>
-  rownames_to_column()
-
-# slopes
-gamma <- item_pars_2pl[, , "loggamma_Intercept"] |>
-  exp() |>
-  sweep(1, person_sds_2pl, "*") |>
-  posterior_summary() |>
-  as_tibble() |>
-  rownames_to_column()
-
-item_pars_2pl <- bind_rows(beta, gamma, .id = "nlpar") |>
-  rename(item = "rowname") |>
-  mutate(item = as.numeric(item)) |>
-  mutate(
-    nlpar = factor(nlpar, labels = c("Easiness", "Discrimination"))
-  )
-
-item_pars_2pl |> 
-  ggplot(aes(item, Estimate, ymin = Q2.5, ymax = Q97.5)) +
-  geom_pointrange() +
-  facet_wrap("nlpar", scales = "free_x") +
-  coord_flip() +
-  labs(x = "Item Number") +
-  theme_bw()
-
-#### Rasch Model too
-
-form_1pl <- bf(
-  choice_rep ~ 1 + (1 | race) + (1 | cvr_id),
-  family = brmsfamily("bernoulli", link = "logit")
-)
-
-prior_1pl <- 
-  prior("normal(0, 2)", class = "Intercept") +
-  prior("normal(0, 3)", class = "sd", group = "cvr_id") + 
-  prior("normal(0, 3)", class = "sd", group = "race")
-
-fit_1pl <- brm(
-  formula = form_1pl,
-  prior = prior_1pl,
-  data = data_colorado,
-  chains = 4,
-  iter = 2000,
-  file = "fits/bin_1pl_colorado",
-  file_refit = "on_change",
-  sample_prior = TRUE,
-  seed = 02139,
-  silent = 0
-)
-
 ## Rhat Plots
 
 # cat_1pl <- readRDS("fits/cat_1pl_new.rds")
-cat_2pl <- readRDS("fits/cat_2pl.rds")
-bin_1pl <- readRDS("fits/bin_1pl_colorado.rds")
-bin_2pl <- readRDS("fits/bin_2pl_colorado.rds")
+cat_2pl <- readRDS("fits/cat_2pl_unrestricted.rds")
+ber_1pl <- readRDS("fits/bernoulli_rasch.rds")
+ber_2pl <- readRDS("fits/bernoulli_2pl.rds")
 
 signs <- as_draws_df(cat_2pl) |>
   select(matches("^gamma\\[")) |>
@@ -458,11 +137,11 @@ signs <- as_draws_df(cat_2pl) |>
   sign()
 
 cat_2pl_flipped <- as_draws_df(cat_2pl) |>
-  mutate(across(matches("(^alpha\\[)|(^gamma\\[)|(^beta\\[)"), ~ gamma_signs * .))
+  mutate(across(matches("(^alpha\\[)|(^gamma\\[)"), ~ gamma_signs * .))
 
 fits <- list("Categorical, 2PL" = cat_2pl_flipped,
-             "Bernoulli, 1PL" = bin_1pl,
-             "Bernoulli, 2PL" = bin_2pl)
+             "Bernoulli, 1PL" = ber_1pl,
+             "Bernoulli, 2PL" = ber_2pl)
 
 rhats <- tibble(fit = fits, fit_name = names(fits)) |> 
   mutate(rhat = map(fit, ~ select(summarise_draws(.x), rhat))) |> 
@@ -479,3 +158,91 @@ p_rhats <- rhats |>
   theme_bw()
 
 ggsave("figs/rhat_comparison.jpg", plot = p_rhats, width = 8, height = 4, units = "in")
+
+
+m <- cmdstan_model("R/cat_2pl_gpu.stan", compile = TRUE)
+# m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = TRUE)
+
+fit <- m$sample(
+  data = stan_data,
+  chains = 4,
+  iter_warmup = 1000,
+  iter_sampling = 1000,
+  seed = 02139,
+  parallel_chains = 4,
+  threads_per_chain = 20
+)
+
+open_dataset("../cvrs/data/cvr_qa_main/", format = "parquet") |> 
+  filter(state == "COLORADO") |> 
+  distinct(county_name, cvr_id) |> 
+  tally() |> 
+  collect()
+
+
+#############################################
+
+base <- open_dataset("../cvrs/data/cvr_qa_main/", format = "parquet") |> 
+  filter(state == "COLORADO", (magnitude == 1 | is.na(magnitude)), !is.na(office), !is.na(district))
+
+contested_races <- base |> 
+  distinct(county_name, office, district, candidate) |> 
+  arrange(county_name, office, district) |> 
+  collect() |> 
+  filter(n() > 1, .by = c(county_name, office, district)) |> 
+  distinct(county_name, office, district)
+
+randoms <- base |>
+  distinct(county_name, cvr_id) |>
+  collect() |> 
+  slice_sample(n=1e5)
+
+data <- base |> 
+  inner_join(randoms, by = c("county_name", "cvr_id")) |>
+  inner_join(contested_races, by = c("county_name", "office", "district")) |> 
+  mutate(choice_rep = as.numeric(party_detailed == "REPUBLICAN")) |> 
+  collect() |> 
+  mutate(district = if_else(office %in% c("US HOUSE", "STATE SENATE", "STATE HOUSE"), 
+                            str_remove(district, county_name),
+                            district),
+         district = str_remove(district, fixed(", ")),
+         race = str_c(office, district, sep = " - "),
+         candidate = case_when(
+           str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
+           .default = candidate
+         ))
+
+uniques <- data |> 
+  arrange(cvr_id, race, candidate) |> 
+  mutate(choice = str_c(race, candidate, choice_rep, sep = "|")) |> 
+  select(state, county_name, cvr_id, choice) |> 
+  nest(data = choice) |> 
+  mutate(pattern = map_chr(data, ~ str_flatten(pull(.x, choice), collapse = "||")))
+
+grouped <- uniques |> 
+  left_join(count(uniques, pattern) |> mutate(group_id = row_number())) |> 
+  select(state, county_name, data, n, group_id) |> 
+  unnest(cols = data) |> 
+  separate_wider_delim(choice, delim = "|", names = c("race", "candidate", "choice_rep"))
+
+form <- bf(
+  choice_rep | weights(n) ~ 1 + (1 | race) + (1 | group_id),
+  family = brmsfamily("bernoulli", link = "logit")
+)
+
+priors <-
+  prior("normal(0, 2)", class = "Intercept") +
+  prior("normal(0, 3)", class = "sd", group = "group_id") +
+  prior("normal(0, 3)", class = "sd", group = "race")
+
+fit <- brm(
+  formula = form,
+  prior = priors,
+  data = grouped,
+  chains = 4,
+  iter = 2000,
+  seed = 02139,
+  silent = 0,
+  file = str_c("fits/bernoulli_rasch_grouped"),
+  file_refit = "on_change"
+)
