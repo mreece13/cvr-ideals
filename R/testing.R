@@ -246,3 +246,11 @@ fit <- brm(
   file = str_c("fits/bernoulli_rasch_grouped"),
   file_refit = "on_change"
 )
+
+
+d <- targets::tar_read(data_colorado)
+
+d <- open_dataset("../cvrs/data/cvr_qa_main/", format = "parquet") |> 
+  filter(state == "COLORADO") |> 
+  distinct(office, district) |> 
+  collect()
