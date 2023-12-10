@@ -21,14 +21,14 @@ get_data <- function(path, st, partisan_only = FALSE, num = 1e9){
   
   if (st == "all"){
     base_data <- open_dataset(path,
-                              partitioning = "state",
+                              partitioning = c("state", "county_name"),
                               schema = partial_schema,
                               format = "parquet") |> 
       filter(magnitude == "1", !is.na(office), !is.na(district)) |> 
       select(-magnitude)
   } else {
     base_data <- open_dataset(path,
-                              partitioning = "state",
+                              partitioning = c("state", "county_name"),
                               schema = partial_schema,
                               format = "parquet") |> 
       filter(state == st, magnitude == "1", !is.na(office), !is.na(district)) |> 
@@ -107,18 +107,7 @@ get_stan_data <- function(data){
       str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
       TRUE ~ candidate
     ),
-    race = str_remove(race, ", "),
-    candidate_order = case_match(
-      candidate,
-      "JOSEPH R BIDEN" ~ 1,
-      "DONALD J TRUMP" ~ 2,
-      .default = 3
-    ),
-    race_order = case_match(
-      office,
-      "US PRESIDENT" ~ 1,
-      .default = 2
-    ))
+    race = str_remove(race, ", "))
   
   # Assign unique IDs to races and candidates
   races <- df |> 
