@@ -84,7 +84,7 @@ pick_random_voters <- function(data, n){
   slice_sample(distinct(data, cvr_id), n=n)
 }
 
-group_voters <- function(data, categorical = FALSE){
+group_voters <- function(data, categorical){
   
   if (categorical){
     uniques <- data |> 
