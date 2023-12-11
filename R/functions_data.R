@@ -95,7 +95,7 @@ group_voters <- function(data, categorical){
       mutate(pattern = map_chr(data, ~ str_flatten(pull(.x, choice), collapse = "||")))
     
     grouped <- uniques |> 
-      left_join(count(uniques, pattern) |> mutate(group_id = row_number())) |> 
+      left_join(count(uniques, pattern) |> mutate(group_id = as.character(row_number()))) |> 
       select(state, county_name, data, n, group_id) |> 
       unnest(cols = data) |> 
       separate_wider_delim(choice, delim = "|", names = c("race", "candidate"))
@@ -108,7 +108,7 @@ group_voters <- function(data, categorical){
       mutate(pattern = map_chr(data, ~ str_flatten(pull(.x, choice), collapse = "||")))
     
     grouped <- uniques |> 
-      left_join(count(uniques, pattern) |> mutate(group_id = row_number())) |> 
+      left_join(count(uniques, pattern) |> mutate(group_id = as.character(row_number()))) |>
       select(state, county_name, data, n, group_id) |> 
       unnest(cols = data) |> 
       separate_wider_delim(choice, delim = "|", names = c("race", "choice_rep"))
