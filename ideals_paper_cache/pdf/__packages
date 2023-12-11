@@ -10,3 +10,8 @@ dplyr
 stringr
 forcats
 lubridate
+patchwork
+Rcpp
+brms
+tidybayes
+bayesplot
