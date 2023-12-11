@@ -4,9 +4,14 @@ author: "Mason Reece"
 date: today
 date-format: long
 bibliography: "references.bib"
+abstract-title: Abstract
+abstract: |
+  How representative are politicians of their constituents? This question has been asked, and answered, for decades of political science research, but I take a new approach to the question using cast vote records (CVRs). CVRs avoid some of the flaws of survey research and aggregate-level analysis, allowing estimation of the complete distribution of voter preferences. They additionally allow me to make novel observations of the performance of lower-ballot politicians. I use this data to conduct ideal-point estimation in the state of Colorado and show that, like other research has found, that politicians are not representative of even the voters who elect them. 
 execute: 
   echo: false
-  cache: false
+  cache: true
+  message: false
+  warning: false
 format: 
   html:
     toc: true
@@ -19,12 +24,16 @@ format:
 ---
 
 ```{r}
-#| message: false
-#| warning: false
+#| cache: false
 
-library(targets)
-library(tarchetypes)
+set.seed(02139)
+
+library(patchwork)
 library(tidyverse)
+library(brms)
+library(tidybayes)
+library(bayesplot)
+library(targets)
 
 ```
 
@@ -32,15 +41,13 @@ library(tidyverse)
 
 How representative is the government of its constituents? This topic has been repeatedly probed in the political science literature [e.g., @caneswrone_out_2002; @bafumi_leapfrog_2010; @kirkland_representation_2022]. However, those analyses use aggregated measures of voter preferences or survey-based estimates of ideology rather than the actual votes of individuals [for an exception, see @lewis2001]. Survey-based estimates suffer from two related flaws. First, like all surveys, issues of sampling bias, response bias, their temporal relationship with the actual election, and other such problems prevents them from being perfect representations of vote choice. Second, surveys are often unable to ask voters about the full set of choices on their ballot, mostly given space constraints and the difficulty that arises from determining which exact races a voter was eligible to vote in. Aggregated data overcomes these two issues by using the results from an election and being able to look at the results in every race on the ballot. However, with aggregated data we lose the richness of being able to study the same voter up and down the ballot. What if voters are splitting their tickets, vacillate randomly between candidates, or otherwise act in such a way that aggregate measures would miss?
 
-To avoid all of these problems, I use an original data set of "cast vote records" (CVRs) that reveal anonymous, individual voter choices in each race in the 2020 election. Since these are true votes by people, they do not suffer from the same problems as surveys, and because I can uniquely identify the same voter up and down the ballot, issues of aggregation do not apply here. The downside of using CVRs is that they reveal very little additional information about the voter. There are no names, no voter IDs, no demographic information, or anything that might violate the privacy of a voter. The only thing that could be done would be to attempt to parse the precinct of the voter (which is only available for some counties) and back out aggregate level demographic information on the voters. For this paper, I set this process aside and only work with the anonymized data.
+To avoid these problems, I use an original data set of "cast vote records" (CVRs) that reveal anonymous, individual voter choices in each race in the 2020 election. Since these are true votes by people, they do not suffer from the same problems as surveys, and because I can uniquely identify the same voter up and down the ballot, issues of aggregation do not apply here. The downside of using CVRs is that they reveal very little additional information about the voter. There are no names, no voter IDs, no demographic information, or anything that might violate the privacy of a voter. The only thing that could be done would be to attempt to parse the precinct of the voter (which is only available for some counties) and back out aggregate level demographic information on the voters. For this paper, I set this process aside and only work with the anonymized data.
 
-Using this data, I estimate the latent traits of voters that are best described by their vote choices in the election. In previous research, the first dimension of this latent trait is often assumed to be the ideology of the voter, so I refer to this latent trait as ideology henceforth [@clinton2004; @lewis2001; @bonica2014; @heckman1996].
+Using this data, I estimate the latent traits of voters that are best described by their vote choices in the election. In previous research, the first dimension of this latent trait is often assumed to be the ideology of the voter, so I refer to this latent trait as ideology henceforth [@clinton2004; @lewis2001; @bonica2014; @heckman1996; @bonica_inferring_2018]. These latent traits are interesting in their own right, but I also take the additional step where data is available to compare DIME score estimates of candidate ideology [@bonica_mapping_2014] to aggregate levels of candidate ideology I construct based on those voters who cast their ballots for that candidate. I find that those values are not perfectly correlated, indicating that candidate's behavior while in office is not representative of even those voters who elected them. This research adds to decades of research showing how representative's do not always represent the underlying distribution of beliefs in their districts [@fenno1978; @bafumi_leapfrog_2010].
 
-\[talk more about representational model goals\]
+# Data & Empirical Approach
 
-# Data
-
-My data is limited to the 2020 election and a non-random set of states/counties. Nevertheless, it still contains almost 1 billion choices in elections at all levels of government and in localities of all kinds from all over the country. See @fig-map for the full distribution of counties. I remove all uncontested races, and all races where a voter could select more than one candidate (although see @sec-potential-extensions). In addition, I subset my data to a random selection of 25,000 voters in Colorado, to make computation tractable. Colorado has some of the best coverage of any state in the data -- nearly every county is represented and the state already has a decent partisan and demographic mix so that I can think of it as a good benchmark for how the model would perform in every other state.
+My data is limited to the 2020 election and a non-random set of states/counties. Nevertheless, it still contains almost 1 billion choices in elections at all levels of government and in localities of all kinds from all over the country. See @fig-map for the full distribution of counties. I remove all uncontested races, and all races where a voter could select more than one candidate (although see @sec-potential-extensions). In addition, I subset my data to a random selection of 25,000 voters in Colorado, to make computation tractable. Colorado has some of the best coverage of any state in the data -- nearly every county is represented and the state already has a decent partisan and demographic mix so that I think of it as a good benchmark for how the model would perform in every other state.
 
 ![Cast Vote Record Distribution](writing/images/county_map2.jpeg){#fig-map}
 
@@ -48,44 +55,279 @@ My data is limited to the 2020 election and a non-random set of states/counties.
 
 ## Item Response Theory
 
-## Binomial Outcome
+| Quantity                       | Symbol           |
+|--------------------------------|------------------|
+| Individual                     | $j = 1, 2, …, J$ |
+| Race                           | $k = 1, 2, …, K$ |
+| Candidate                      | $c = 1, 2, …, C$ |
+| Ideal point of voter $j$       | $\alpha$         |
+| Discrimination/Slope Parameter | $\gamma$         |
+| Difficulty/Location Parameter  | $\beta$          |
+
+## Bernoulli Model
 
 To start, I follow the previous literature on this topic @lewis2001 by only focusing on binary choices. That research achieved that by only focusing on propositions, which are inherently encoded as Yes/No choices. However, I want to make use of the full set of my data, so I create a variable `choice_rep` that is a binary 1/0 for if the voter has selected the Republican candidate in the race. This choice means that all ideal points on the right side of the scale will indicate greater likelihood to select the Republican candidate (and thus naturally map to the left/right US political party scale). In theory, a similar variable for the choice of the Democrat would have achieved basically the same results (just with the scale flipped).
 
-### Rasch Model
-
-I start by fitting a simple Rasch model. First, I do this for a random county in Colorado, Adams County, then for the whole state. I estimate the following Bernoulli model using `brms` . All models are run for 4 chains, with 1000 warm-up iterations and then 1000 sampling iterations. Trace plots are too numerous to display, so @fig-binomial-rhats instead plots the $\hat{R}$ value for every parameter in the model. As can be seen, all $\hat{R}$ values are extremely close to 1, indicating the model has converged well. This is true for all the model specifications in this section (also shown in @fig-binomial-rhats).
+I start by fitting a simple Rasch model. I estimate the following Bernoulli model using `brms` . All models are run for 4 chains, with 1000 warm-up iterations and then 1000 sampling iterations. Trace plots are too numerous to display, so @fig-rhats instead plots the $\hat{R}$ value for every parameter in the model. As can be seen, all $\hat{R}$ values are extremely close to 1, indicating the model has converged well. This is true for all the model specifications in this section (also shown in @fig-rhats).
 
 ```{r}
 #| eval: false
 #| echo: true
 
-bf(choice_rep ~ county_name + (1 | office/district) + (1 | cvr_id))
+bf(choice_rep ~ 1 + (1 | race) + (1 | cvr_id))
 ```
 
 ```{r}
-#| label: fig-binomial-rhats
-#| fig-cap: Comparison of $\hat{R}$ values
-#| cache: true
+#| label: fig-rhats
+#| fig-cap: Distribution of Gelman-Rubin Diagnostic
 
-tar_read(plot_rhat_comparison)
+cat_2pl <- readRDS("fits/cat_2pl_unrestricted.rds")
+ber_1pl <- readRDS("fits/bernoulli_rasch_grouped.rds")
+ber_2pl <- readRDS("fits/bernoulli_2pl_grouped.rds")
+
+signs <- as_draws_df(cat_2pl) |>
+  select(matches("^gamma\\[")) |>
+  rowMeans() |>
+  sign()
+
+cat_2pl_flipped <- as_draws_df(cat_2pl) |>
+  mutate(across(matches("(^alpha\\[)|(^gamma\\[)"), ~ signs * .))
+
+fits <- list("Categorical" = cat_2pl_flipped,
+             "Bernoulli, Rasch" = ber_1pl,
+             "Bernoulli, 2PL" = ber_2pl)
+
+rhats <- tibble(fit = fits, fit_name = names(fits)) |> 
+  mutate(rhat = map(fit, ~ select(summarise_draws(.x), rhat))) |> 
+  select(-fit) |> 
+  unnest(cols = rhat)
+
+rhats |> 
+  ggplot(aes(x = rhat)) +
+  geom_dots() +
+  scale_y_continuous(labels = NULL) +
+  facet_wrap(~ fit_name, scales = "free_x", ncol=3) +
+  labs(x = expression(hat(R)), y = "", color = "Fit") +
+  theme_bw()
+
 ```
 
 Rasch models treat each race as equally important in determining the ideal point of a voter, so I only look at those ideal points. I randomly select 10 voters and plot their estimated ideal points in @fig-binomial-rasch-voters-adams. These estimates generally make sense; voter "224789" chose entirely Republican candidates except for two races whereas voter "415" and "48066" voted straight Democrat and straight Republican ballots, respectively. The variation in outcome in "224789" lets me better identify their location on the first dimension, which is why the distribution of the posterior is tighter for these voters.
 
 ```{r}
-#| label: fig-binomial-rasch-voters-adams
-#| fig-cap: Ideal Points for Partisans, Binomial, Rasch -- Adams County, Colorado
-#| warning: false
+#| label: fig-bernoulli-ideals
+#| fig-cap: Example Ideal Points from the Bernoulli Model
 
-tar_read(plot_rasch_binomial_partisans_colorado_adams_voters)
+p1 <- ber_1pl |>
+ spread_draws(r_group_id[group_id, var]) |>
+ mutate(alpha = r_group_id/sd(r_group_id)) |>
+ filter(group_id < 10) |> 
+ ggplot(aes(x = alpha, y = as.character(group_id))) +
+ stat_halfeye() +
+ theme_bw() +
+ geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+ labs(x = expression(alpha), y = "Voter Group", title = "Rasch Model")
+
+p2 <- ber_2pl |> 
+  spread_draws(r_group_id__alpha[group_id,]) |> 
+  mutate(alpha = r_group_id__alpha/sd(r_group_id__alpha)) |> 
+  filter(group_id < 10) |> 
+  ggplot(aes(x = alpha, y = as.character(group_id))) +
+  stat_halfeye() +
+  theme_bw() +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  labs(x = expression(alpha), y = "", title = "2PL Model")
+
+p1 + p2
 ```
 
-### 2PL Model, Constrained Discrimination
+```{r}
+#| label: fig-bernoulli-params
+#| fig-cap: Discrimination and Difficulty Parameters from the Bernoulli Model
 
-## Categorical Outcomes
+person_pars_2pl <- ranef(ber_2pl, summary = FALSE)$group_id[, , "alpha_Intercept"] 
+person_sds_2pl <- apply(person_pars_2pl, 1, sd)
+item_pars_2pl <- coef(ber_2pl, summary = FALSE)$race
+  
+# locations
+beta <- item_pars_2pl[, , "beta_Intercept"] |>
+  as_tibble() |> 
+  pivot_longer(cols = everything(), names_to = "race") |> 
+  mutate(race = str_remove(race, fixed(", ")) |> str_squish()) |> 
+  mutate(nlpar = "beta")
 
-# Potential Extensions {#sec-potential-extensions}
+random_races <- beta |> 
+  distinct(race) |> 
+  slice_sample(n=12) |> 
+  bind_rows(tibble(race = c("US PRESIDENT - STATEWIDE", "US SENATE - STATEWIDE"))) |> 
+  distinct(race)
+
+# slopes
+gamma <- item_pars_2pl[, , "loggamma_Intercept"] |>
+  sweep(1, person_sds_2pl, "*") |>
+  as_tibble() |> 
+  pivot_longer(cols = everything(), names_to = "race") |> 
+  mutate(nlpar = "gamma") |> 
+  mutate(race = str_remove(race, fixed(", ")) |> str_squish()) 
+
+bind_rows(beta, gamma) |>
+  inner_join(random_races) |> 
+  mutate(nlpar = factor(nlpar, labels = c("Difficulty", "Discrimination"))) |>
+  ggplot(aes(x = value, y = race)) +
+  stat_pointinterval() +
+  geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
+  facet_wrap(~ nlpar, scales = "free_x") +
+  labs(y = "", x = "") +
+  theme_bw()
+```
+
+## Categorical Model
+
+Model specification
+
+```{r}
+#| label: fig-cat-ideals
+
+cat_2pl <- readRDS("fits/cat_2pl_unrestricted.rds")
+
+gamma_signs <- as_draws_df(cat_2pl) |>
+  select(matches("^gamma\\[")) |>
+  rowMeans() |>
+  sign()
+
+cat_2pl <- as_draws_df(cat_2pl) |>
+  mutate(across(matches("(^alpha\\[)|(^gamma\\[)"), ~ gamma_signs * .))
+
+cat_2pl |> 
+  spread_draws(alpha[group_id]) |> 
+  ungroup() |> 
+  mutate(alpha = (alpha - mean(alpha))/sd(alpha)) |> 
+  filter(group_id < 15) |> 
+  ggplot(aes(x = alpha, y = as.character(group_id))) +
+  stat_halfeye() +
+  theme_bw() +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  labs(x = expression(alpha), y = "Voter", title = "Categorical Model -- Latent Trait")
+```
+
+```{r}
+data <- tar_read(data_base_adams) |> 
+  # propositions are not quite right
+  mutate(candidate = case_when(
+    str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
+    TRUE ~ candidate
+  ),
+  race = str_remove(race, ", "))
+
+# Assign unique IDs to races and candidates
+races <- data |> 
+  distinct(race) |> 
+  arrange(race) |> 
+  mutate(race_id = row_number())
+
+candidates <- data |> 
+  distinct(race, candidate) |> 
+  arrange(race, candidate) |>
+  select(candidate) |>
+  mutate(candidate_id = row_number())
+
+# Join back to the original data
+df <- data |> 
+  left_join(races, by = "race") |> 
+  left_join(candidates, by = "candidate")
+
+# some races are not classified perfectly in districts rn so they would show up as list-columns (bad)
+bad_races <- df |> 
+  count(cvr_id, race_id) |> 
+  filter(n > 1) |> 
+  distinct(race_id) |> 
+  pull(race_id)
+
+df <- df |> 
+  filter(!(race_id %in% bad_races)) |>
+  drop_na(race_id, candidate_id)
+
+votes_matrix <- df |> 
+  mutate(trump_voter = ifelse(race == "US PRESIDENT - STATEWIDE" & candidate == "DONALD J TRUMP", 1, 0), .by = cvr_id) |> 
+  select(cvr_id, race_id, candidate_id, trump_voter) |> 
+  arrange(race_id, candidate_id) |>
+  pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |> 
+  select(cvr_id, trump_voter) |> 
+  mutate(id = row_number())
+
+pres_choices <- df |> 
+  filter(office == "US PRESIDENT") |> 
+  distinct(cvr_id, candidate) |> 
+  filter(candidate %in% c(
+    "KANYE WEST",
+    "JOSEPH R BIDEN",
+    "JO JORGENSEN",
+    "HOWIE HAWKINS",
+    "GLORIA LA RIVA",
+    "DONALD J TRUMP"
+  ))
+
+voters <- df |> 
+  select(cvr_id, race_id, candidate_id) |> 
+  arrange(race_id, candidate_id) |> 
+  distinct(cvr_id) |> 
+  mutate(id = row_number()) |> 
+  left_join(pres_choices)
+
+cat_2pl |> 
+  spread_draws(alpha[id]) |> 
+  ungroup() |> 
+  mutate(alpha = alpha/sd(alpha)) |> 
+  left_join(voters, join_by(id)) |> 
+  drop_na(candidate) |> 
+  ggplot(aes(x = alpha, fill = candidate, y = candidate)) +
+  ggridges::geom_density_ridges() +
+  theme_bw() +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  labs(x = expression(alpha), y = "", fill = "", title = "Categorical 2PL Model -- By Presidential Vote")
+```
+
+```{r}
+
+sds <- cat_2pl |> 
+  spread_draws(alpha[cvr_id]) |> 
+  ungroup() |> 
+  summarise(sd = sd(alpha), .by = ".draw") |> 
+  pull(sd)
+
+draws <- cat_2pl |> 
+  as_draws_df() |>
+  select(starts_with("beta["), starts_with("gamma[")) |> 
+  sweep(1, sds, "*") |> 
+  mutate(across(everything(), ~ na_if(.x, 0))) |> 
+  pivot_longer(cols = everything(), values_drop_na = TRUE) |> 
+  separate_wider_delim(cols = name, delim = "[", names = c("parameter", "race_id")) |> 
+  separate_wider_delim(cols = race_id, delim = ",", names = c("race_id", "candidate_id")) |> 
+  mutate(candidate_id = str_remove(candidate_id, "]")) |> 
+  mutate(race_id = as.numeric(race_id),
+         candidate_id = as.numeric(candidate_id)) |>
+  left_join(races) |> 
+  left_join(candidates)
+
+draws |> 
+  filter(str_detect(race, "US PRESIDENT")) |> 
+  mutate(race = str_remove(race, " - STATEWIDE")) |> 
+  mutate(parameter = factor(parameter, labels = c("Difficulty", "Discrimination"))) |>
+  ggplot(aes(x = value, y = candidate)) +
+  stat_halfeye() +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  facet_wrap(~ parameter, scales = "free_x") +
+  theme_bw() +
+  labs(x = "", y = "", title = "Categorical 2PL Model -- Other Params")
+```
+
+# Results
+
+# Conclusion {#sec-potential-extensions}
+
+I have shown that
+
+There are several steps
 
 Scaling latent space together from this data and the DIME scores could be Scaling Data from Multiple Sources by Ted Enamorado 1, Gabriel López-Moctezuma2 and Marc Ratkovic.
 
@@ -95,10 +337,6 @@ Nonparametric Ideal-Point Estimation and Inference Alexander Tahk
 
 Extension to modeling races with magnitude \> 1
 
-Group voters together into similar patterns, makes more possible to estimate
-
-Only work with binomial model and figure out next steps from there
-
 Add covariates to inform locations of candidates
 
 Cutpoint should be better identified
@@ -106,3 +344,10 @@ Cutpoint should be better identified
 \newpage
 
 # References
+
+::: {#refs}
+:::
+
+# Appendix {.appendix}
+
+## Code for Estimation
