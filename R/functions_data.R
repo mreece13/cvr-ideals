@@ -68,9 +68,11 @@ get_data <- function(path, st, partisan_only = FALSE, num = 1e9){
     mutate(choice_dem = as.numeric(party_detailed == "DEMOCRAT"),
            choice_rep = as.numeric(party_detailed == "REPUBLICAN")) |> 
     collect() |> 
-    mutate(district = if_else(office %in% c("US HOUSE", "STATE SENATE", "STATE HOUSE"), 
+    mutate(district = if_else(office %in% c("US HOUSE", "STATE SENATE", "STATE HOUSE", "US SENATE", 
+                                            "DISTRICT ATTORNEY", "CITY COUNCIL", "BOARD OF EDUCATION"), 
                               str_remove(district, str_c(", ", county_name)),
                               district)) |> 
+    mutate(district = ifelse(office %in% c("US SENATE", "US PRESIDENT"), "STATEWIDE", district)) |> 
     mutate(race = str_c(office, district, sep = " - "))
 }
 
@@ -114,9 +116,6 @@ group_voters <- function(data, categorical = FALSE){
   }
   
   return(grouped)
-  
-  
-  
 }
 
 get_stan_data <- function(data){

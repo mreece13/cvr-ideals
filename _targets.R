@@ -24,10 +24,11 @@ list(
   tar_target(data_base, get_data(path = cvr_path, st = "COLORADO", num=25000)),
   tar_target(data_colorado, get_data(path = cvr_path, st = "COLORADO", partisan_only = TRUE, num=25000)),
   tar_target(data_base_adams, filter_byCounty(data=data_base, county="ADAMS")),
-  tar_target(data_grouped, group_voters(data_colorado)),
-  tar_target(fit_2pl_binomial_partisans_colorado, fit_bernoulli(data_grouped, type = "2pl")),
-  tar_target(fit_rasch_binomial_partisans_colorado, fit_bernoulli(data_grouped, type = "rasch")),
-  tar_target(stan_data, get_stan_data(data_base_adams)),
+  tar_target(data_grouped_bernoulli, group_voters(data_colorado, categorical = FALSE)),
+  tar_target(data_grouped_categorical, group_voters(data_base_adams, categorical = TRUE)),
+  tar_target(fit_2pl_binomial_partisans_colorado, fit_bernoulli(data_grouped_bernoulli, type = "2pl")),
+  tar_target(fit_rasch_binomial_partisans_colorado, fit_bernoulli(data_grouped_bernoulli, type = "rasch")),
+  tar_target(stan_data, get_stan_data(data_grouped_categorical)),
   tar_target(stan_2pl_code, "R/cat_2pl.stan", format = "file"),
   tar_target(fit_2pl_categorical_colorado, fit_stan(stan_2pl_code, stan_data, "cat_2pl"))
   # tar_quarto(ideals_paper, "ideals_paper.qmd", quiet = FALSE)
