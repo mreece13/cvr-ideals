@@ -82,20 +82,40 @@ pick_random_voters <- function(data, n){
   slice_sample(distinct(data, cvr_id), n=n)
 }
 
-group_voters <- function(data){
+group_voters <- function(data, categorical = FALSE){
   
-  uniques <- data |> 
-    arrange(race, candidate) |> 
-    mutate(choice = str_c(race, candidate, choice_rep, sep = "|")) |> 
-    select(state, county_name, cvr_id, choice) |> 
-    nest(data = choice) |> 
-    mutate(pattern = map_chr(data, ~ str_flatten(pull(.x, choice), collapse = "||")))
+  if (categorical){
+    uniques <- data |> 
+      arrange(race, candidate) |> 
+      mutate(choice = str_c(race, candidate, sep = "|")) |> 
+      select(state, county_name, cvr_id, choice) |> 
+      nest(data = choice) |> 
+      mutate(pattern = map_chr(data, ~ str_flatten(pull(.x, choice), collapse = "||")))
+    
+    grouped <- uniques |> 
+      left_join(count(uniques, pattern) |> mutate(group_id = row_number())) |> 
+      select(state, county_name, data, n, group_id) |> 
+      unnest(cols = data) |> 
+      separate_wider_delim(choice, delim = "|", names = c("race", "candidate"))
+  } else {
+    uniques <- data |> 
+      arrange(race, candidate) |> 
+      mutate(choice = str_c(race, choice_rep, sep = "|")) |> 
+      select(state, county_name, cvr_id, choice) |> 
+      nest(data = choice) |> 
+      mutate(pattern = map_chr(data, ~ str_flatten(pull(.x, choice), collapse = "||")))
+    
+    grouped <- uniques |> 
+      left_join(count(uniques, pattern) |> mutate(group_id = row_number())) |> 
+      select(state, county_name, data, n, group_id) |> 
+      unnest(cols = data) |> 
+      separate_wider_delim(choice, delim = "|", names = c("race", "choice_rep"))
+    
+  }
   
-  uniques |> 
-    left_join(count(uniques, pattern) |> mutate(group_id = row_number())) |> 
-    select(state, county_name, data, n, group_id) |> 
-    unnest(cols = data) |> 
-    separate_wider_delim(choice, delim = "|", names = c("race", "candidate", "choice_rep"))
+  return(grouped)
+  
+  
   
 }
 
