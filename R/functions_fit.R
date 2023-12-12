@@ -4,7 +4,7 @@ fit_bernoulli <- function(data, type){
   
   if (type == "rasch"){
     form <- bf(
-      choice_rep | weights(n) ~ 1 + (1 | race) + (1 | group_id),
+      choice_rep ~ 1 + (1 | race) + (1 | group_id),
       family = brmsfamily("bernoulli", link = "logit")
     )
     
@@ -16,7 +16,7 @@ fit_bernoulli <- function(data, type){
   
   if (type == "2pl"){
     form <- bf(
-      choice_rep | weights(n) ~ exp(loggamma) * alpha - beta,
+      choice_rep ~ exp(loggamma) * alpha - beta,
       nl = TRUE,
       alpha ~ 0 + (1 | group_id),
       beta ~ 1 + (1 |i| race),
@@ -40,7 +40,7 @@ fit_bernoulli <- function(data, type){
     iter = 2000,
     seed = 02139,
     silent = 0,
-    file = str_c("fits/bernoulli_", type, "_grouped"),
+    file = str_c("fits/bernoulli_", type),
     file_refit = "on_change"
   )
   
