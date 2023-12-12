@@ -4,13 +4,13 @@ fit_bernoulli <- function(data, type){
   
   if (type == "rasch"){
     form <- bf(
-      choice_rep ~ 1 + (1 | race) + (1 | group_id),
+      choice_rep ~ 1 + (1 | race) + (1 | cvr_id),
       family = brmsfamily("bernoulli", link = "logit")
     )
     
     priors <-
       prior("normal(0, 2)", class = "Intercept") +
-      prior("normal(0, 3)", class = "sd", group = "group_id") +
+      prior("normal(0, 3)", class = "sd", group = "cvr_id") +
       prior("normal(0, 3)", class = "sd", group = "race")
   }
   
@@ -18,7 +18,7 @@ fit_bernoulli <- function(data, type){
     form <- bf(
       choice_rep ~ exp(loggamma) * alpha - beta,
       nl = TRUE,
-      alpha ~ 0 + (1 | group_id),
+      alpha ~ 0 + (1 | cvr_id),
       beta ~ 1 + (1 |i| race),
       loggamma ~ 1 + (1 |i| race),
       family = brmsfamily("bernoulli", link = "logit")
@@ -27,7 +27,7 @@ fit_bernoulli <- function(data, type){
     priors <-
       prior("normal(0, 2)", class = "b", nlpar = "beta") +
       prior("normal(0, 1)", class = "b", nlpar = "loggamma") +
-      prior("normal(0, 1)", class = "sd", group = "group_id", nlpar = "alpha") +
+      prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") +
       prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
       prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
   }
