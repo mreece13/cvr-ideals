@@ -130,14 +130,14 @@ get_stan_data <- function(data){
   
   # Assign unique IDs to races and candidates
   races <- df |> 
-    distinct(race, race_order) |> 
-    arrange(race_order, race) |> 
+    distinct(race) |> 
+    arrange(race) |> 
     select(race) |> 
     mutate(race_id = row_number())
   
   candidates <- df |> 
-    distinct(race_order, race, candidate_order, candidate) |> 
-    arrange(race_order, race, candidate_order, candidate) |>
+    distinct(race, candidate) |> 
+    arrange(race, candidate) |>
     select(candidate) |>
     mutate(candidate_id = row_number())
   
