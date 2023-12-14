@@ -24,6 +24,7 @@ format:
     number-sections: true
     citecolor: blue
     link-citations: true
+    fig-cap-location: bottom
 ---
 
 ```{r}
@@ -60,7 +61,7 @@ CVRs were released by some local election administrators in response to increasi
 
 ![Cast Vote Record Distribution](writing/images/county_map2.jpeg){#fig-map}
 
-# Model Specification
+# Model Estimation
 
 Since I am attempting to estimate a continuous, latent, scale using only discrete information on each voter, I follow in the footsteps of other researchers in this topic and estimate an Item-Response Theory (IRT) model [@lewis2001; @clinton2004; @martin2002]. A common specification of the IRT model, reformulated from @jackman2009, is the "two-parameter" model. Subscripts and quantities of interest can be found in @tbl-terms.
 
@@ -105,19 +106,20 @@ I start by fitting a simple Rasch model. I estimate the following Bernoulli mode
 #| label: fig-rhats
 #| fig-cap: Distribution of Gelman-Rubin Diagnostic
 
-cat_2pl <- readRDS("fits/cat_2pl_unrestricted.rds")
 ber_1pl <- readRDS("fits/bernoulli_rasch.rds")
 ber_2pl <- readRDS("fits/bernoulli_2pl.rds")
 
-signs <- as_draws_df(cat_2pl) |>
+signs <- readRDS("fits/cat_2pl_unrestricted.rds") |> 
+  as_draws_df() |>
   select(matches("^gamma\\[")) |>
   rowMeans() |>
   sign()
 
-cat_2pl_flipped <- as_draws_df(cat_2pl) |>
+cat_2pl <- readRDS("fits/cat_2pl_unrestricted.rds") |> 
+  as_draws_df() |>
   mutate(across(matches("(^alpha\\[)|(^gamma\\[)"), ~ signs * .))
 
-fits <- list("Categorical" = cat_2pl_flipped,
+fits <- list("Categorical" = cat_2pl,
              "Bernoulli, Rasch" = ber_1pl,
              "Bernoulli, 2PL" = ber_2pl)
 
@@ -227,16 +229,6 @@ The varying-races, varying-choices structure of election data in does not work w
 #| fig-cap: Example Ideal Points from the Categorical Model
 #| fig-width: 8
 #| fig-height: 6
-
-cat_2pl <- readRDS("fits/cat_2pl_unrestricted.rds")
-
-gamma_signs <- as_draws_df(cat_2pl) |>
-  select(matches("^gamma\\[")) |>
-  rowMeans() |>
-  sign()
-
-cat_2pl <- as_draws_df(cat_2pl) |>
-  mutate(across(matches("(^alpha\\[)|(^gamma\\[)"), ~ gamma_signs * .))
 
 cat_2pl |> 
   spread_draws(alpha[cvr_id]) |> 
@@ -382,28 +374,42 @@ draws |>
   labs(x = "", y = "")
 ```
 
+## Comparison to DIME Scores
+
 # Conclusion {#sec-potential-extensions}
 
-I have shown that
+I show, using a novel data source, that a single latent trait does not
 
 ## Future Work
 
-I am considering several next steps for this project. First, one choice that @lewis2001 makes in their paper to improve the computational efficiency of the model is to group voters based on their patterns of voting. Since voters are not identified by anything other than their pattern they are interchangeable, and simply multiplying the log-likelihood by the number of voters in that group is sufficient to estimate the model. However, when I briefly experimented with this in the Bernoulli models, the `brms` models refused to converge. I anticipate I will experiment with this process more in the future to increase the speed of estimation, which I anticipate will be about a 25% speedup. Additionally, to speed the computational speed of my categorical model, I need to switch to use the GPU processing supported in Stan, which requires a rewrite of my Stan model. The speedup from this process is unknown but I anticipate it should help some, and will help me take more advantage of MIT's Supercloud platform.
+I am considering several next steps for this project. First, one choice that @lewis2001 makes in their paper to improve the computational efficiency of the model is to group voters based on their patterns of voting. Since voters are not identified by anything other than their pattern they are interchangeable, and simply multiplying the log-likelihood by the number of voters in that group is sufficient to estimate the model. However, when I briefly experimented with this in the Bernoulli models, the `brms` models had horrible convergence properties. One reason I anticipate this occurs, and is a reason suggested by but not tested in @lewis2001, is that the number of voters in each group (because of the detailed down-ballot data I have) is quite small. I anticipate I will experiment with this process more in the future to increase the speed of estimation, which I anticipate will be about a 25% speedup, assuming the model converges.. Additionally, to speed the computational speed of my categorical model, I need to switch to use the GPU processing supported in Stan, which requires a rewrite of my Stan model. The speedup from this process is unknown but I anticipate it should help some, and will help me take more advantage of MIT's Supercloud platform.
 
 Substantively, there are three extensions that I foresee as useful to this project. First, and most importantly, is setting informative priors on the model. These could be derived from a first pass of a variational inference approach to estimation, followed by the fully Bayesian estimation. Alternatively, they may come from a reformulation of the DIME scores, although as I showed earlier, these are sparse for the races in my data. The advantage of informative priors is simple to see in terms of computational efficiency, but they would also help alleviate issues with bimodality in the categorical model, which is driven by my inability to fix the sign of the discrimination parameter, $\gamma$. Informative priors will help me define this *a priori*.
 
 Second, I have filtered out races where voters could choose more than one candidate to elect. This is relatively common in city council and school board elections and would constitute an interesting extension of this model to make use of the repeated information in the same race about a single voter to more clearly define their latent location in the ideological space. I am not sure how to achieve this computationally.
 
-Third, previous research using IRT models and vote behaviors [@poole_patterns_1991; @rivers2003; @lewis2001] has estimated more than one dimension of the underlying latent ideological dimension. Although there is considerable debate over whether this gap even exists, a full consideration of the
+Third, previous research using IRT models and vote behaviors [@poole_patterns_1991; @rivers2003; @lewis2001] has estimated more than one dimension of the underlying latent ideological dimension. Although there is considerable debate over whether this gap even exists, a full consideration of the data would at least test multiple dimensions and see if this explains the data in a more informative way. In particular, explaining why certain voters cast ballots for third-party candidates or for specific nonpartisan candidates might be better explained by additional dimensions than by the single, "ideological" dimension.
 
-{{\< pagebreak\> }}
+\newpage
 
 # References
 
 ::: {#refs}
 :::
 
-{{\< pagebreak\> }}
+::: tex
+\newpage
+
+\appendix
+
+\renewcommand{\thefigure}{A\arabic{figure}}
+
+\renewcommand{\thetable}{A\arabic{table}}
+
+\setcounter{figure}{0}
+
+\setcounter{table}{0}
+:::
 
 # Appendix {.appendix}
 
@@ -547,4 +553,45 @@ model {
     target += reduce_sum(partial_sum, votes, grainsize, alpha, beta, gamma, mu_beta, candidates, eligibility);
   }
 }
+```
+
+## Convergence Diagnostics
+
+```{r}
+#| label: fig-trace-ber1
+#| fig-cap: Traceplots for 24 random parameters in the Bernoulli Rasch Model
+#| fig-height: 12
+#| fig-width: 10
+
+vars <- get_variables(ber_1pl) |> sample(size = 24)
+
+mcmc_trace(ber_1pl, pars = vars, ncol = 3)
+
+```
+
+```{r}
+#| label: fig-trace-ber2
+#| fig-cap: Traceplots for 24 random parameters in the Bernoulli 2PL Model
+#| fig-height: 12
+#| fig-width: 12
+
+vars <- get_variables(ber_2pl) |> sample(size = 24)
+
+mcmc_trace(ber_2pl, pars = vars, ncol = 3)
+```
+
+```{r}
+#| label: fig-trace-cat
+#| fig-cap: Traceplots for 24 random parameters in the Categorical 2PL Model
+#| fig-height: 12
+#| fig-width: 8
+
+vars <- summarise_draws(cat_2pl) |> 
+  filter(mean > 0.1 | mean < -0.1, !str_detect(variable, "raw")) |> 
+  slice_sample(n=24) |> 
+  pull(variable)
+
+mcmc_trace(cat_2pl,
+           pars = vars, 
+           ncol = 3)
 ```
