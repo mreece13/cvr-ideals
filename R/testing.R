@@ -107,3 +107,27 @@ p2 <- merged |>
   labs(x = expression(alpha), y = "")
 
 ggsave("figs/dime_comparison.jpeg", p2, width = 8, height = 12, units = "in")
+
+### rhat plots
+
+p_r1 <- tibble(r = rhat(ber_1pl)) |> 
+  ggplot(aes(x = r)) +
+  geom_dots() +
+  scale_y_continuous(labels = NULL) +
+  labs(title = "Bernoulli Rasch", x = expression(hat(R)), y = "")
+
+p_r2 <- tibble(r = rhat(ber_2pl)) |> 
+  ggplot(aes(x = r)) +
+  geom_dots() +
+  scale_y_continuous(labels = NULL) +
+  labs(title = "Bernoulli 2PL", x = expression(hat(R)), y = "")
+
+p_r3 <- tibble(r = summarise_draws(cat_2pl)$rhat) |> 
+  ggplot(aes(x = r)) +
+  geom_dots() +
+  scale_y_continuous(labels = NULL) +
+  labs(title = "Categorical 2PL", x = expression(hat(R)), y = "")
+
+plot <- p_r1 + p_r2 + p_r3 & theme_medsl()
+
+ggsave("figs/rhat_comparison.jpg", plot = plot, width = 10, height = 6, units = "in")

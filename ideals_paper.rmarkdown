@@ -38,7 +38,7 @@ library(tidybayes)
 library(bayesplot)
 library(targets)
 
-source("medsl_theme.R")
+source("../medsl_theme.R")
 
 ber_1pl <- readRDS("fits/bernoulli_rasch.rds")
 ber_2pl <- readRDS("fits/bernoulli_2pl.rds")
@@ -53,6 +53,8 @@ cat_2pl <- readRDS("fits/cat_2pl.rds") |>
   as_draws_df() |>
   mutate(across(matches("(^alpha\\[)|(^gamma\\[)"), ~ signs * .))
 ```
+
+
 
 # Introduction
 
@@ -118,6 +120,8 @@ I start by fitting a simple Rasch model. I estimate the following Bernoulli mode
 Rasch models treat each race as equally important in determining the ideal point of a voter, so I only look at those ideal points. I randomly select 10 voters and plot their estimated ideal points in the left panel of @fig-bernoulli-ideals. These estimates generally make sense; voters 42 and 4 voted straight-ticket Democrat and voters 45 and 39 voted straight-ticket Republican, whereas voter 7 cast a more split-ticket. The different exact estimates are due to the differing impact of casting a ballot for the Republican in a specific race versus another, which is driven entirely by the difficulty parameter in the Rasch model but by both the difficulty and discrimination parameter in the 2PL model.
 
 I then proceed after the Rasch model to also fit a 2PL model, which allows the discrimination parameter to vary and be estimated. As can be seen in the right panel of @fig-bernoulli-ideals, the estimates match up closely to the estimates from the Rasch model. That there isn't much difference makes sense given the context of US elections, where most voters choose the same party up and down the ballot, so no single race is likely to be more informative than others on their location on a latent scale. To confirm this, I directly plot the difficulty and discrimination parameters for a random set of races from the 2PL model in @fig-bernoulli-params. Although many of the races are significantly different from 0, most of those races are all quite similarly discriminatory. I don't want to read too much into these parameters, but the lack of wild variation suggests that they are all acting in a similar way to one another.
+
+
 
 ```{r}
 #| label: fig-bernoulli-ideals
@@ -190,6 +194,8 @@ bind_rows(beta, gamma) |>
   theme_medsl()
 ```
 
+
+
 ## Categorical Outcomes
 
 The categorical model is nearly the same as the Bernoulli model, with some slight modifications. @eq-irt becomes the following, where $F(\cdot)$ is the softmax function, a multivariate generalization of the inverse logit function.
@@ -207,6 +213,8 @@ I estimate this model on a smaller subset of the Colorado data, using only voter
 The varying-races, varying-choices structure of election data in does not work well with standard categorical functions because they typically expect a consistent, vector of probabilities of each candidate's selection in a given race. In elections, voters do not participate in the same races in the same election and choose among different candidates. I could estimate all of the parameters independently for each unique race that a voter cast their ballot in, but because I want to share information between races and between voters, those parameters must be estimated jointly. The way I get around the single-length vector requirement of categorical functions is by assigning large negative probabilities to candidates who were ineligible to be voted for in a certain election (e.g., Joe Biden would've had a large negative probability when estimating the function for the Colorado Senate race). Then, the reference category is fixed at 0, and the probabilities for other candidates are allowed to vary. I estimate the model using a bespoke Stan model. More information is provided in @sec-code.
 
 In @fig-cat-ideals I plot a similar set of example ideal points for 14 random voters (these are NOT the same voters as in @fig-bernoulli-ideals). The categorical model has a lot more variation than the Bernoulli model, which makes sense since we are allowing each voter to have a more complicated representation of their choices, rather than just whether they picked the Republican or not. To further provide evidence that the models are converging to something reasonable, I plot the distribution of all draws of the ideal points for Trump and Biden voters in @fig-cat-presvote. This plot shows that BIden voters are consistently on the left-side of the median, but closer to the middle than their counterparts, Trump voters. Since Trump voters are generally considered a bit more conservative than Biden voters are considered liberal, these results seem to be facially valid given anecdotal knowledge about the American electorate.
+
+
 
 ```{r}
 #| label: fig-cat-ideals
@@ -311,7 +319,11 @@ joined |>
 
 ```
 
+
+
 One advantage of the categorical model is that I can also replicate these results for all candidates in the presidential race in Colorado. The distributions of ideal points of voters who cast ballots for each of the third-party candidates is shown in @fig-cat-presvote-others. These results generally make sense, candidates like Gloria La Riva (Socialist Party) are on the left side of the scale, while candidates like Don Blankenship (Constitution Party) and Jo Jorgensen (Libertarian Party) are on the right side of the scale. Some candidates, like Rocque de la Fuente have a strongly bimodal distribution which could indicate that they're receiving votes from people on both sides of the aisle. However, as is true for many of these third-party candidates (particularly Kanye West), perhaps the single-dimension assumption imposed by my model doesn't appropriately describe the type of voter who would cast ballots for these candidates.
+
+
 
 ```{r}
 #| label: fig-cat-presvote-others
@@ -330,7 +342,11 @@ joined |>
 
 ```
 
+
+
 For the categorical model, I also plot the discrimination and difficulty parameters for the presidential race in @fig-cat-params. Because both of these parameters are defined in reference to the baseline category (Bill Hammons, in this case), they are challenging to interpret in any meaningful way. In particular, although their credible intervals all cross zero, it looks like votes for Biden or for Trump are more informative (although in contradicting signs) than a vote for Howie Hawkins on a voter's underlying latent trait. This makes sense given our prior knowledge about American voters.
+
+
 
 ```{r}
 #| label: fig-cat-params
@@ -370,6 +386,8 @@ draws |>
   theme_medsl()
 
 ```
+
+
 
 ## Comparison to DIME Scores
 
@@ -416,6 +434,8 @@ Third, previous research using IRT models and vote behaviors [@poole_patterns_19
 
 I use `brms` to estimate the Bernoulli models. For the Rasch model, I use the random-effects formulation of an IRT model, as shown below, where I include a random effect for the race and for each group of voters. This approach is recommended by @burkner_bayesian_2021. I also set relatively uninformative priors on the distributions of each variable.
 
+
+
 ```{r}
 #| eval: false
 #| echo: true
@@ -431,7 +451,11 @@ priors <-
       prior("normal(0, 3)", class = "sd", group = "race")
 ```
 
+
+
 For the 2PL Bernoulli model, I again follow the recommendation of @burkner_bayesian_2021 and estimate a multivariate, nonlinear model with `brms`. The formula is shown below. I estimate the log of the $\gamma$ parameter and then exponentiate it in the main formula to ensure that it is always positive. Additionally, because of the flexibility enabled in `brms`, I am able to note that the two random effects for race as correlated in the estimates for $\beta$ and $\gamma$. This is notated by the $|i|$ in the formulas. Again, I set relatively uninformative priors on the model parameters.
+
+
 
 ```{r}
 #| eval: false
@@ -454,6 +478,8 @@ priors <-
       prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
 
 ```
+
+
 
 For the categorical model, I have created a bespoke Stan model to estimate the 2PL IRT model. The varying-races, varying-choices structure of election data in does not work well with the standard Stan function `categorical_logit()` because it expects a single-length row vector of probabilities of each candidate's selection in a given race. I avoid this issue by using two lookup tables, `candidates` which determines if a candidate was eligible to be voted for in a given race $k$ and `eligibility` which determines if a given voter $j$ was eligible to vote in a race $k$. If the candidate was unavailable in a given race, they are assigned a large negative probability of selection, then the first candidate in the race is set as the reference category and has probability 0, then the remaining probabilities are estimated using the IRT setup. Probabilities are only computed for voters who were eligible to vote in the race. I use a non-centered parameterization of $\beta$ to speed estimation, and additionally implement the `reduce_sum` within-chain parallelization recommended by Stan to speed performance. This allows a model for 1200 voters, representing approximately 50,000 observations, to be fit in only an hour on MIT's Supercloud cluster [@reuther2018interactive].
 
@@ -556,6 +582,8 @@ model {
 
 ## Convergence Diagnostics
 
+
+
 ```{r}
 #| label: fig-trace-ber1
 #| fig-cap: Traceplots for 24 random parameters in the Bernoulli Rasch Model
@@ -594,3 +622,4 @@ mcmc_trace(cat_2pl,
            pars = vars, 
            ncol = 3)
 ```
+
