@@ -31,5 +31,5 @@ list(
   tar_target(stan_data, get_stan_data(data_base_adams)),
   tar_target(stan_2pl_code, "R/cat_2pl.stan", format = "file"),
   tar_target(fit_2pl_categorical_colorado, fit_stan(stan_2pl_code, stan_data, "cat_2pl")),
-  tar_quarto(ideals_paper, "ideals_paper.qmd", quiet = FALSE)
+  # tar_quarto(ideals_paper, "ideals_paper.qmd", quiet = FALSE)
 )
