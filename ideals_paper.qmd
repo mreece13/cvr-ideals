@@ -38,7 +38,7 @@ library(tidybayes)
 library(bayesplot)
 library(targets)
 
-source("medsl_theme.R")
+source("../medsl_theme.R")
 
 ber_1pl <- readRDS("fits/bernoulli_rasch.rds")
 ber_2pl <- readRDS("fits/bernoulli_2pl.rds")
@@ -124,6 +124,8 @@ I then proceed after the Rasch model to also fit a 2PL model, which allows the d
 #| fig-cap: Example Ideal Points from the Bernoulli Model
 #| fig-width: 8
 #| fig-height: 6
+#| cache: true
+#| cache-lazy: true
 
 p1 <- ber_1pl |>
    spread_draws(r_cvr_id[cvr_id, var]) |>
@@ -356,7 +358,21 @@ draws <- cat_2pl |>
   mutate(race_id = as.numeric(race_id),
          candidate_id = as.numeric(candidate_id)) |>
   left_join(races) |> 
-  left_join(candidates)
+  left_join(candidates) |> 
+  mutate(candidate = str_squish(candidate)) |> 
+  mutate(candidate = case_match(
+    candidate,
+    "JOSEPH KISHORE NORISSA SANTA CRUZ" ~ "JOSEPH KISHORE",
+    "JORDAN CANCER SCOTT JENNIFER TEPOOL" ~ "JORDAN SCOTT",
+    "BILL HAMMONS ERIC BODENSTAB" ~ "BILL HAMMONS",
+    "MARK CHARLES ADRIAN WALLACE" ~ "MARK CHARLES",
+    "PRINCESS KHADIJAH MARYAM JACOB FAMBRO KHADIJAH MARYAM JACOB SR" ~ "PRINCESS KHADIJAH JACOB-FAMBRO",
+    "KYLE KENLEY KOPITKE NATHAN RE VO SORENSON" ~ "KYLE KENLEY",
+    "JOE MC HUGH ELIZABETH STORM" ~ "JOE MCHUGH",
+    "BLAKE HUBER FRANK ATWOOD" ~ "BLAKE HUBER",
+    "PHIL COLLINS BILLY JOE PARKER" ~ "PHIL COLLINS",
+    .default = candidate
+  ))
 
 draws |> 
   filter(str_detect(race, "US PRESIDENT")) |> 
