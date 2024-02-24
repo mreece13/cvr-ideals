@@ -2,13 +2,15 @@
 rm(list=ls())
 gc()
 
+library(patchwork)
 library(tidyverse)
-library(cmdstanr)
+library(brms)
 library(tidybayes)
 library(bayesplot)
-library(arrow)
-library(brms)
 library(targets)
+library(posterior)
+
+source("../medsl_theme.R")
 
 m <- cmdstan_model("R/cat_2pl_gpu.stan", compile = TRUE)
 # m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = TRUE)
@@ -25,109 +27,88 @@ fit <- m$sample(
 
 ###################################
 
-data <- tar_read(data_base_adams) |> 
-  # propositions are not quite right
-  mutate(candidate = case_when(
-    str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
-    TRUE ~ candidate
-  ),
-  race = str_remove(race, ", "))
+cat_2pl <- readRDS("fits/cat_2pl.rds") |> 
+  as_draws_matrix() |> 
+  subset_draws(variable = "gamma")
 
-# Assign unique IDs to races and candidates
-races <- data |> 
-  distinct(race) |> 
-  arrange(race) |> 
-  mutate(race_id = row_number())
+# glimpse(cat_2pl)
 
-candidates <- data |> 
-  distinct(race, candidate) |> 
-  arrange(race, candidate) |>
-  select(candidate) |>
-  mutate(candidate_id = row_number())
+var <- str_replace(colnames(cat_2pl), ".+\\[([0-9]+),([0-9]+)\\]$", "\\1")
+var <- as.integer(var)
+dim <- rep(1, length(var))
+dim <- str_replace(colnames(cat_2pl), ".+\\[([0-9]+),([0-9]+)\\]$", "\\2")
+dim <- as.integer(dim)
 
-# Join back to the original data
-df <- data |> 
-  left_join(races, by = "race") |> 
-  left_join(candidates, by = "candidate")
+colord <- order(var, dim)
+colnames(cat_2pl) <- str_replace(
+  colnames(cat_2pl),
+  "^gamma\\[([0-9]+),([0-9]+)\\]$",
+  "LambdaV\\1_\\2"
+)
+# glimpse(colnames(cat_2pl))
 
-# some races are not classified perfectly in districts rn so they would show up as list-columns (bad)
-bad_races <- df |> 
-  count(cvr_id, race_id) |> 
-  filter(n > 1) |> 
-  distinct(race_id) |> 
-  pull(race_id)
+library(factor.switching)
 
-df <- df |> 
-  filter(!(race_id %in% bad_races)) |>
-  drop_na(race_id, candidate_id)
+out <- rsp_full_sa(
+  lambda_mcmc = cat_2pl[, colord],
+  rotate = TRUE,
+  maxIter = 200,
+  threshold = 1e-6,
+  sa_loops = 10,
+  verbose = TRUE
+)
 
-merge_choices <- function(race, candidate){
-  
-  choices <- df |> 
-    filter(race == {{ race }}) |> 
-    distinct(cvr_id, candidate)
-  
-  df |> 
-    select(cvr_id, race_id, candidate_id) |> 
-    arrange(race_id, candidate_id) |> 
-    distinct(cvr_id) |> 
-    mutate(id = row_number()) |> 
-    left_join(choices) |> 
-    drop_na(candidate) |> 
-    filter(candidate == {{ candidate }}) |> 
-    select(id)
-}
+mpcm_lambda_mat_id <- as_draws_df(out$lambda_reordered_mcmc)
+summary(summarise_draws(mpcm_lambda_mat_id))
 
-dime <- read_csv("data/dime_matches.csv") |> 
-  mutate(recipient.cfscore = (recipient.cfscore - mean(recipient.cfscore, na.rm = TRUE)/sd(recipient.cfscore, na.rm = TRUE))) |> 
-  drop_na(recipient.cfscore) |> 
-  distinct(office, district, candidate, .keep_all = TRUE) |> 
-  mutate(race = str_c(office, district, sep = " - ")) |> 
-  select(race, candidate, dime_score = recipient.cfscore) |> 
-  filter(race %in% unique(df$race)) |> 
-  filter(n()>1, .by = race)
+summary(summarise_draws(cat_2pl))
 
-draws <- cat_2pl |> 
-  spread_draws(alpha[id]) |> 
-  ungroup() |>  
-  mutate(alpha = alpha/sd(alpha)) |> 
-  select(id, alpha)
+mpcm_lambda_mat_id[, 1:10] |> 
+  mcmc_areas()
 
-merged <- dime |> 
-  mutate(voters = map2(race, candidate, merge_choices)) |> 
-  unnest(cols = voters) |> 
-  left_join(draws)
+draws <- as_draws_df(out$lambda_reordered_mcmc) |>
+  sweep(1, sds, "*") |> 
+  mutate(across(everything(), ~ na_if(.x, 0))) |> 
+  select(-starts_with(".")) |> 
+  pivot_longer(cols = everything(), values_drop_na = TRUE) |> 
+  mutate(name = str_remove(name, "LambdaV")) |> 
+  # separate_wider_delim(cols = name, delim = "V", names = c("parameter", "race_id")) |> 
+  separate_wider_delim(cols = name, delim = "_", names = c("race_id", "candidate_id")) |> 
+  # mutate(candidate_id = str_remove(candidate_id, "]")) |> 
+  mutate(race_id = as.numeric(race_id),
+         candidate_id = as.numeric(candidate_id)) |> 
+  left_join(races) |> 
+  left_join(candidates) |> 
+  mutate(candidate = str_squish(candidate)) |> 
+  mutate(candidate = case_match(
+    candidate,
+    "JOSEPH KISHORE NORISSA SANTA CRUZ" ~ "JOSEPH KISHORE",
+    "JORDAN CANCER SCOTT JENNIFER TEPOOL" ~ "JORDAN SCOTT",
+    "BILL HAMMONS ERIC BODENSTAB" ~ "BILL HAMMONS",
+    "MARK CHARLES ADRIAN WALLACE" ~ "MARK CHARLES",
+    "PRINCESS KHADIJAH MARYAM JACOB FAMBRO KHADIJAH MARYAM JACOB SR" ~ "PRINCESS KHADIJAH JACOB-FAMBRO",
+    "KYLE KENLEY KOPITKE NATHAN RE VO SORENSON" ~ "KYLE KENLEY",
+    "JOE MC HUGH ELIZABETH STORM" ~ "JOE MCHUGH",
+    "BLAKE HUBER FRANK ATWOOD" ~ "BLAKE HUBER",
+    "PHIL COLLINS BILLY JOE PARKER" ~ "PHIL COLLINS",
+    .default = candidate
+  ))
 
-p2 <- merged |> 
-  ggplot(aes(x = alpha, y = candidate)) +
-  stat_halfeye() +
-  geom_point(aes(x = dime_score, y = candidate), color = "blue", size = 4) +
-  facet_wrap(~ race, ncol = 1, scales = "free") +
-  theme_medsl() +
-  labs(x = expression(alpha), y = "")
+pres_options <- distinct(pres_choices, candidate) |> pull()
 
-ggsave("figs/dime_comparison.jpeg", p2, width = 8, height = 12, units = "in")
+p1 <- draws |> 
+  select(value, race, candidate) |> 
+  filter(str_detect(race, "US PRESIDENT"), candidate %in% c("JOSEPH R BIDEN", "GLORIA LA RIVA", "DONALD J TRUMP", "BILL HAMMONS")) |> 
+  # mutate(race = str_remove(race, " - STATEWIDE")) |> 
+  # mutate(parameter = factor(parameter, labels = c("Difficulty", "Discrimination"))) |>
+  mutate(value = ifelse(candidate == "BILL HAMMONS", 0, value)) |> 
+  ggplot(aes(x = value, y = candidate)) +
+  stat_halfeye(normalize = "xy") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  # facet_wrap(~ parameter, scales = "free_x") +
+  labs(x = "", y = "", title = "Discrimination Parameter after Full-SA RSP Algorithm") +
+  theme_bw()
 
-### rhat plots
+p1 + p2
 
-p_r1 <- tibble(r = rhat(ber_1pl)) |> 
-  ggplot(aes(x = r)) +
-  geom_dots() +
-  scale_y_continuous(labels = NULL) +
-  labs(title = "Bernoulli Rasch", x = expression(hat(R)), y = "")
-
-p_r2 <- tibble(r = rhat(ber_2pl)) |> 
-  ggplot(aes(x = r)) +
-  geom_dots() +
-  scale_y_continuous(labels = NULL) +
-  labs(title = "Bernoulli 2PL", x = expression(hat(R)), y = "")
-
-p_r3 <- tibble(r = summarise_draws(cat_2pl)$rhat) |> 
-  ggplot(aes(x = r)) +
-  geom_dots() +
-  scale_y_continuous(labels = NULL) +
-  labs(title = "Categorical 2PL", x = expression(hat(R)), y = "")
-
-plot <- p_r1 + p_r2 + p_r3 & theme_medsl()
-
-ggsave("figs/rhat_comparison.jpg", plot = plot, width = 10, height = 6, units = "in")
+ggsave("figs/compare.jpg", width = 16, height = 12, units = "in")
