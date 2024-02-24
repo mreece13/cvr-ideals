@@ -4,72 +4,68 @@ plot_trace <- function(fit){
   mcmc_trace(fit, regex_pars = "^b_")
 }
 
-plot_rhats <- function(fits){
+plot_rhats <- function(){
   
-  tibble(fit = fits, fit_name = names(fits)) |> 
-    mutate(rhat = map(fit, ~ select(summarise_draws(.x), rhat))) |> 
-    select(-fit) |> 
-    unnest(cols = rhat) |> 
-    ggplot(aes(x = rhat)) +
-    geom_dots() + 
-    geom_vline(xintercept = 1, color = "blue", linetype = "dashed") +
+  ber_1pl <- readRDS("fits/bernoulli_rasch.rds")
+  ber_2pl <- readRDS("fits/bernoulli_2pl.rds")
+  cat_2pl <- readRDS("fits/cat_2pl_unrestricted.rds")
+  
+  p_r1 <- tibble(r = rhat(ber_1pl)) |> 
+    ggplot(aes(x = r)) +
+    geom_dots() +
     scale_y_continuous(labels = NULL) +
-    facet_wrap(~ fit_name, scales = "free_x", ncol=2) +
-    labs(x = expression(hat(R)), y = "") +
-    theme_bw()
+    labs(title = "Binary 1PL", x = expression(hat(R)), y = "")
+  
+  p_r2 <- tibble(r = rhat(ber_2pl)) |> 
+    ggplot(aes(x = r)) +
+    geom_dots() +
+    scale_y_continuous(labels = NULL) +
+    labs(title = "Binary 2PL", x = expression(hat(R)), y = "")
+  
+  p_r3 <- tibble(r = summarise_draws(cat_2pl)$rhat) |> 
+    ggplot(aes(x = r)) +
+    geom_dots() +
+    scale_y_continuous(labels = NULL) +
+    labs(title = "Categorical 2PL", x = expression(hat(R)), y = "")
+  
+  plot <- p_r1 + p_r2 + p_r3 & theme_medsl()
+  
+  ggsave("figs/rhat_comparison.jpg", plot = plot, width = 10, height = 6, units = "in")
+  
+  return("RHAT PLOT")
   
 }
 
-plot_voters <- function(fit, randos, twopl){
+plot_bin <- function(){
   
-  if (twopl){
-    plot <- fit |> 
-      spread_draws(r_cvr_id__eta[cvr_id, dimension]) |> 
-      mutate(cvr_id = as.character(cvr_id)) |> 
-      inner_join(randos) |>
-      mutate(r_cvr_id__eta = if_else(r_cvr_id__eta > quantile(r_cvr_id__eta, 0.99, na.rm = TRUE), NA, r_cvr_id__eta)) |> 
-      mutate(r_cvr_id__eta = if_else(r_cvr_id__eta < quantile(r_cvr_id__eta, 0.01, na.rm = TRUE), NA, r_cvr_id__eta)) |> 
-      ggplot(aes(y = cvr_id, x = r_cvr_id__eta)) +
-      geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
-      stat_halfeye() +
-      labs(x = "Ideal Point Estimate", y = "Voter ID") +
-      theme_bw()
-    
-  } else {
-    plot <- fit |> 
-      spread_draws(r_cvr_id[cvr_id, dimension]) |> 
-      mutate(cvr_id = as.character(cvr_id)) |> 
-      inner_join(randos) |>
-      mutate(r_cvr_id = if_else(r_cvr_id > quantile(r_cvr_id, 0.99, na.rm = TRUE), NA, r_cvr_id)) |> 
-      mutate(r_cvr_id = if_else(r_cvr_id < quantile(r_cvr_id, 0.01, na.rm = TRUE), NA, r_cvr_id)) |> 
-      ggplot(aes(y = cvr_id, x = r_cvr_id)) +
-      geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
-      stat_halfeye() +
-      labs(x = "Ideal Point Estimate", y = "Voter ID") +
-      theme_bw()
-  }
+  ber_1pl <- readRDS("fits/bernoulli_rasch.rds")
+  ber_2pl <- readRDS("fits/bernoulli_2pl.rds")
   
-  return(plot)
+  p1 <- ber_1pl |>
+    spread_draws(r_cvr_id[cvr_id, var]) |>
+    mutate(alpha = r_cvr_id/sd(r_cvr_id)) |>
+    filter(cvr_id < 50) |> 
+    ggplot(aes(x = alpha, y = as.character(cvr_id))) +
+    stat_halfeye() +
+    theme_bw() +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+    labs(x = expression(alpha), y = "Voter", title = "Bernoulli 1PL Model -- Latent Trait")
   
-}
-
-plot_offices <- function(fit){
+  p2 <- ber_2pl |> 
+    spread_draws(r_cvr_id__alpha[cvr_id,]) |> 
+    mutate(alpha = r_cvr_id__alpha/sd(r_cvr_id__alpha)) |> 
+    filter(cvr_id < 50) |> 
+    ggplot(aes(x = alpha, y = as.character(cvr_id))) +
+    stat_halfeye() +
+    theme_bw() +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+    labs(x = expression(alpha), y = "", title = "Bernoulli 2PL Model -- Latent Trait")
   
-  fit |> 
-    spread_draws(r_office__logalpha[office, dimension], r_office__eta[office, dimension]) |> 
-    pivot_longer(cols = starts_with("r_")) |> 
-    mutate(value = if_else(value > quantile(value, 0.99, na.rm = TRUE), NA, value)) |> 
-    mutate(value = if_else(value < quantile(value, 0.01, na.rm = TRUE), NA, value)) |> 
-    ungroup() |> 
-    mutate(name = case_match(
-      name,
-      "r_office__logalpha" ~ "Discrimination",
-      "r_office__eta" ~ "Easiness",
-    )) |> 
-    ggplot(aes(x = value, y = office)) +
-    stat_halfeye() + 
-    geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
-    facet_wrap(~ name, scales = "free_x") +
-    theme_bw()
+  plot <- p1 + p2 & scale_x_continuous(limits = c(-6, 6))
+  
+  ggsave("figs/rhat_comparison.jpg", plot = plot, width = 6, height = 6, units = "in")
+  
+  return("Bernoulli PLOT - ALPHA")
+  
   
 }

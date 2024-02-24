@@ -65,5 +65,5 @@ fit_stan <- function(model, stan_data, file_name){
   
   fit$save_object(path)
   
-  path
+  return(path)
 }
