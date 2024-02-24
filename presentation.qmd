@@ -1,6 +1,5 @@
 ---
 title: "Estimation of Ideal Points Using Cast Vote Records"
-subtitle: "Quant III and Bayesian Measurement"
 date: today
 date-format: long
 embed-resources: true
@@ -25,34 +24,6 @@ format:
     include-in-header: metropolis_options_mit.tex
 ---
 
-## Introduction
-
-```{r}
-#| output: false
-#| cache: false
-
-set.seed(02139)
-
-library(patchwork)
-library(tidyverse)
-library(brms)
-library(tidybayes)
-library(bayesplot)
-library(targets)
-
-```
-
-How representative is a government of its people?
-
-<div>
-
--   One approach (of many) compares the "ideological" positions of legislators and voters \pause
-    -   For legislators: roll-call votes [@poole_patterns_1991], campaign contributions [@bonica_mapping_2014; @bonica_inferring_2018], tweets [@barberá2015], etc. \pause
-    -   For voters: surveys [e.g., @bafumi_leapfrog_2010] and **cast vote records (CVRs)** [@lewis2001] \pause
-        -   I focus on CVRs because they have the most complete information and let us answer questions about down-ballot races
-
-</div>
-
 ## Cast Vote Records
 
 ::: {layout="[10,8]"}
@@ -71,7 +42,7 @@ How representative is a government of its people?
 
 ## Distribution of Cast Vote Records
 
-![](writing/images/county_map2.jpeg)
+![](figs/cd_map.png)
 
 ## Methodology - IRT Model
 
@@ -108,237 +79,71 @@ How representative is a government of its people?
 
     -   Future work: Informative priors using party or NOMINATE/DIME scores to help with identification and speed convergence
 
-## Convergence
+## Categorical Results - Ideal Points
 
-![](figs/rhat_comparison.jpg)
+![](figs/cat_ideals.jpg)
 
-## Bernoulli Results - $\alpha$
+## Categorical Results -- Aggregated Ideal Points
 
-```{r}
+![](figs/cat_aggregated.jpg)
 
-ber_1pl <- readRDS("fits/bernoulli_rasch.rds")
-ber_2pl <- readRDS("fits/bernoulli_2pl.rds")
+## Introduction (Option 1)
 
-p1 <- ber_1pl |>
- spread_draws(r_cvr_id[cvr_id, var]) |>
- mutate(alpha = r_cvr_id/sd(r_cvr_id)) |>
- filter(cvr_id < 50) |> 
- ggplot(aes(x = alpha, y = as.character(cvr_id))) +
- stat_halfeye() +
- theme_bw() +
- geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
- labs(x = expression(alpha), y = "Voter", title = "Bernoulli Rasch Model -- Latent Trait")
+How representative is a government of its people?
 
-p2 <- ber_2pl |> 
-  spread_draws(r_cvr_id__alpha[cvr_id,]) |> 
-  mutate(alpha = r_cvr_id__alpha/sd(r_cvr_id__alpha)) |> 
-  filter(cvr_id < 50) |> 
-  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
-  stat_halfeye() +
-  theme_bw() +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  labs(x = expression(alpha), y = "", title = "Bernoulli 2PL Model -- Latent Trait")
+<div>
 
-p1 + p2 & scale_x_continuous(limits = c(-6, 6))
-```
+-   One approach (of many) compares the "ideological" positions of legislators and voters \pause
+    -   For legislators: roll-call votes [@poole_patterns_1991], campaign contributions [@bonica_mapping_2014; @bonica_inferring_2018], tweets [@barberá2015], etc. \pause
+    -   For voters: surveys [e.g., @bafumi_leapfrog_2010] and **cast vote records (CVRs)** [@lewis2001] \pause
+        -   I focus on CVRs because they have the most complete information and let us answer questions about down-ballot races
 
-## Binary Results - $\beta$ and $\gamma$
+</div>
 
-```{r}
+## Representation First Pass
 
-person_pars_2pl <- ranef(ber_2pl, summary = FALSE)$cvr_id[, , "alpha_Intercept"] 
-person_sds_2pl <- apply(person_pars_2pl, 1, sd)
-item_pars_2pl <- coef(ber_2pl, summary = FALSE)$race
-  
-# locations
-beta <- item_pars_2pl[, , "beta_Intercept"] |>
-  as_tibble() |> 
-  pivot_longer(cols = everything(), names_to = "race") |> 
-  mutate(race = str_remove(race, fixed(", ")) |> str_squish()) |> 
-  mutate(nlpar = "beta")
+![](figs/dime_comparison%20copy.jpeg)
 
-random_races <- beta |> 
-  distinct(race) |> 
-  slice_sample(n=12) |> 
-  bind_rows(tibble(race = c("US PRESIDENT - STATEWIDE", "US SENATE - STATEWIDE"))) |> 
-  distinct(race)
+## Introduction (Option 2)
 
-# slopes
-gamma <- item_pars_2pl[, , "loggamma_Intercept"] |>
-  sweep(1, person_sds_2pl, "*") |>
-  as_tibble() |> 
-  pivot_longer(cols = everything(), names_to = "race") |> 
-  mutate(nlpar = "gamma") |> 
-  mutate(race = str_remove(race, fixed(", ")) |> str_squish()) 
+Partisanship is embedded in who we are [@campbell_american_1960; @fiorina_retrospective_1981; @green_partisan_2002] and how political parties represent themselves [@aldrich_why_2011]
 
-bind_rows(beta, gamma) |>
-  inner_join(random_races) |> 
-  mutate(nlpar = factor(nlpar, labels = c("Difficulty", "Discrimination"))) |> 
-  ggplot(aes(x = value, y = race)) +
-  stat_pointinterval() +
-  geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
-  facet_wrap(~ nlpar, scales = "free_x") +
-  labs(y = "", x = "") +
-  theme_bw()
+-   This extends to the state and local level, both in politics [@hopkins_increasingly_2018] and policy [@hertel-fernandez_state_2019; @grumbach_laboratories_2022]
 
-```
+    . . .
 
-## Categorical Results -- $\alpha$
+-   Yet, 70% of local governments use *nonpartisan* elections [@desantis_contemporary_1991; @svara2003two] where party labels are not present on the ballot
 
-```{r}
+. . .
 
-cat_2pl <- readRDS("fits/cat_2pl_unrestricted.rds")
+Do voters still identify and use partisanship in the absence of party labels?
 
-gamma_signs <- as_draws_df(cat_2pl) |>
-  select(matches("^gamma\\[")) |>
-  rowMeans() |>
-  sign()
+## Previous Work on Hidden Partisanship
 
-cat_2pl <- as_draws_df(cat_2pl) |>
-  mutate(across(matches("(^alpha\\[)|(^gamma\\[)"), ~ gamma_signs * .))
+Two different ways to think about nonpartisan elections
 
-cat_2pl |> 
-  spread_draws(alpha[cvr_id]) |> 
-  ungroup() |> 
-  mutate(alpha = (alpha - mean(alpha))/sd(alpha)) |> 
-  filter(cvr_id < 15) |> 
-  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
-  stat_halfeye() +
-  theme_bw() +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  labs(x = expression(alpha), y = "Voter", title = "Categorical 2PL Model -- Latent Trait")
-```
+1.  Subnational governments often perform non-ideological work [@adrian_general_1952; @peterson_city_1981; @oliver2012local; @anzia_party_2021] so voters should choose them non-ideologically
 
-## Categorical Results -- $\alpha$
+    . . .
 
-```{r}
+2.  Nationalization [@hopkins_increasingly_2018], elite preferences [@tausanovitch_measuring_2013], and voter behavior [@sievert_nationalization_2019; @weinschenk_have_2021; @kuriwaki_ticket_2023] indicate that partisanship still dominates
 
-data <- tar_read(data_base_adams) |> 
-  # propositions are not quite right
-  mutate(candidate = case_when(
-    str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
-    TRUE ~ candidate
-  ),
-  race = str_remove(race, ", "))
+    . . .
 
-# Assign unique IDs to races and candidates
-races <- data |> 
-  distinct(race) |> 
-  arrange(race) |> 
-  mutate(race_id = row_number())
+Research in this area tends to use surveys, aggregated observational data, or small n individual data
 
-candidates <- data |> 
-  distinct(race, candidate) |> 
-  arrange(race, candidate) |>
-  select(candidate) |>
-  mutate(candidate_id = row_number())
+## Hidden Partisanship First Pass
 
-# Join back to the original data
-df <- data |> 
-  left_join(races, by = "race") |> 
-  left_join(candidates, by = "candidate")
-
-# some races are not classified perfectly in districts rn so they would show up as list-columns (bad)
-bad_races <- df |> 
-  count(cvr_id, race_id) |> 
-  filter(n > 1) |> 
-  distinct(race_id) |> 
-  pull(race_id)
-
-df <- df |> 
-  filter(!(race_id %in% bad_races)) |>
-  drop_na(race_id, candidate_id)
-
-votes_matrix <- df |> 
-  mutate(trump_voter = ifelse(race == "US PRESIDENT - STATEWIDE" & candidate == "DONALD J TRUMP", 1, 0), .by = cvr_id) |> 
-  select(cvr_id, race_id, candidate_id, trump_voter) |> 
-  arrange(race_id, candidate_id) |>
-  pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |> 
-  select(cvr_id, trump_voter) |> 
-  mutate(id = row_number())
-
-pres_choices <- df |> 
-  filter(office == "US PRESIDENT") |> 
-  distinct(cvr_id, candidate) |> 
-  filter(candidate %in% c(
-    "KANYE WEST",
-    "JOSEPH R BIDEN",
-    "JO JORGENSEN",
-    "HOWIE HAWKINS",
-    "GLORIA LA RIVA",
-    "DONALD J TRUMP"
-  ))
-
-voters <- df |> 
-  select(cvr_id, race_id, candidate_id) |> 
-  arrange(race_id, candidate_id) |> 
-  distinct(cvr_id) |> 
-  mutate(id = row_number()) |> 
-  left_join(pres_choices)
-
-cat_2pl |> 
-  spread_draws(alpha[id]) |> 
-  ungroup() |> 
-  mutate(alpha = alpha/sd(alpha)) |> 
-  left_join(voters, join_by(id)) |> 
-  drop_na(candidate) |> 
-  ggplot(aes(x = alpha, fill = candidate, y = candidate)) +
-  ggridges::geom_density_ridges() +
-  theme_bw() +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  labs(x = expression(alpha), y = "", fill = "", title = "Categorical 2PL Model -- By Presidential Vote")
-
-```
-
-## Categorical Results - $\beta$ and $\gamma$
-
-```{r}
-
-sds <- cat_2pl |> 
-  spread_draws(alpha[cvr_id]) |> 
-  ungroup() |> 
-  summarise(sd = sd(alpha), .by = ".draw") |> 
-  pull(sd)
-
-draws <- cat_2pl |> 
-  as_draws_df() |>
-  select(starts_with("beta["), starts_with("gamma[")) |> 
-  sweep(1, sds, "*") |> 
-  mutate(across(everything(), ~ na_if(.x, 0))) |> 
-  pivot_longer(cols = everything(), values_drop_na = TRUE) |> 
-  separate_wider_delim(cols = name, delim = "[", names = c("parameter", "race_id")) |> 
-  separate_wider_delim(cols = race_id, delim = ",", names = c("race_id", "candidate_id")) |> 
-  mutate(candidate_id = str_remove(candidate_id, "]")) |> 
-  mutate(race_id = as.numeric(race_id),
-         candidate_id = as.numeric(candidate_id)) |>
-  left_join(races) |> 
-  left_join(candidates)
-
-draws |> 
-  filter(str_detect(race, "US PRESIDENT")) |> 
-  mutate(race = str_remove(race, " - STATEWIDE")) |> 
-  mutate(parameter = factor(parameter, labels = c("Difficulty", "Discrimination"))) |>
-  ggplot(aes(x = value, y = candidate)) +
-  stat_halfeye() +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  facet_wrap(~ parameter, scales = "free_x") +
-  theme_bw() +
-  labs(x = "", y = "", title = "Categorical 2PL Model -- Other Params")
-
-```
+![](figs/cat_params.jpg){fig-align="center"}
 
 ## Future Work
 
--   Scaling the models up for the full data set
+-   Hierarchical model to address the *representation* angle \pause
 
-    -   Group voters together based on voting patterns
-
-    -   Incorporate NOMINATE/DIME scores for informative priors or to connect these results better to a question of representation
-
-    -   GPU computations \pause
+-   Scaling the models up for the full data set \pause
 
 -   Extension to races where a voter could choose more than one candidate \pause
 
--   Multiple dimensions
+-   Multiple dimensions for *hidden partisanship* angle
 
 # Thank You!

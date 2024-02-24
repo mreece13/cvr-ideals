@@ -1,15 +1,37 @@
 ---
 title: "Ideal Point Estimation of Voters Using Cast Vote Records"
-author: "Mason Reece"
+author: 
+  - name: Mason Reece
+    affiliation: 
+      - name: Massachussetts Institute of Technology
+        department: Political Science
+        city: Cambridge
+        state: MA
+    email: mpreece@mit.edu
+    corresponding: true
 date: today
 date-format: long
 bibliography: "references.bib"
 linestretch: 1.5
-abstract-title: Abstract
-thanks: | 
-  This paper was completed as part of the Quantitative Research Methods III: Generalized Linear Models and Extensions course taught by Teppei Yamamoto and the Bayesian Measurement Models taught by Devin Caughey. I am indebted to feedback from both of them on this project. Additionally, I acknowledge the MIT SuperCloud and Lincoln Laboratory Supercomputing Center for providing HPC resources that have contributed to the research results reported within this paper.
+mainfont: Palatino
+crossref:
+  custom:
+    - kind: float
+      reference-prefix: Table A
+      space-before-numbering: false
+      key: atbl
+      latex-env: atbl
+      caption-location: bottom
+    - kind: float
+      reference-prefix: Figure A
+      space-before-numbering: false
+      key: afig
+      latex-env: afig
+      caption-location: bottom
+thanks: |
+  I am indebted to feedback on this project from Charles Stewart III, Devin Caughey, Teppei Yamamoto, Fotini Christia, and participants of the MIT Second-Year Paper Workshop. Additionally, I acknowledge the MIT SuperCloud and Lincoln Laboratory Supercomputing Center for providing HPC resources that have contributed to the research results reported within this paper.
 abstract: |
-  How representative are politicians of their constituents? This question has been asked, and answered, for decades of political science research, but I take a new approach to the question using cast vote records (CVRs). CVRs avoid some of the flaws of survey research and aggregate-level analysis, allowing estimation of the complete distribution of voter preferences. They additionally allow me to make novel observations of the performance of lower-ballot politicians. I use this data to conduct ideal-point estimation in the state of Colorado and show that, like other research has found, that politicians are not representative of even the voters who elect them. 
+  Work in progress.
 execute: 
   echo: false
   cache: false
@@ -27,33 +49,6 @@ format:
     fig-cap-location: bottom
 ---
 
-```{r}
-
-set.seed(02139)
-
-library(patchwork)
-library(tidyverse)
-library(brms)
-library(tidybayes)
-library(bayesplot)
-library(targets)
-
-source("../medsl_theme.R")
-
-ber_1pl <- readRDS("fits/bernoulli_rasch.rds")
-ber_2pl <- readRDS("fits/bernoulli_2pl.rds")
-
-signs <- readRDS("fits/cat_2pl.rds") |> 
-  as_draws_df() |>
-  select(matches("^gamma\\[")) |>
-  rowMeans() |>
-  sign()
-
-cat_2pl <- readRDS("fits/cat_2pl.rds") |> 
-  as_draws_df() |>
-  mutate(across(matches("(^alpha\\[)|(^gamma\\[)"), ~ signs * .))
-```
-
 # Introduction
 
 How representative is the government of its constituents? This topic has been repeatedly probed in the political science literature [e.g., @caneswrone_out_2002; @bafumi_leapfrog_2010; @kirkland_representation_2022]. One of the many ways that representation is studied in American politics is by comparing the ideologies of politicians those voters who they represent. For politicians, several data sources have been used, that all show high correlation: roll-call votes [@poole_patterns_1991], campaign contributions [@bonica_mapping_2014; @bonica_inferring_2018], and tweets [@barberá2015], among others. These methods rely on the spate of data available about politicians, and their public positions necessitates that much of it be made public to researchers to use in analyses. This is not the case for voters.
@@ -70,14 +65,14 @@ My data consists of cast vote records (CVRs) collected as part of my summer rese
 
 CVRs were released by some local election administrators in response to increasing calls from election auditors to be able to independently verify the results of the 2020 election. Some states prohibit releasing CVRs in any form, and for other states the ability to do so depended on whether a group requested them from a certain county, whether the county used technology enabling this data to be easily compiled, and whether the county election office had the capacity to even complete the request. It is not known exactly why each county in my data released their data, and so at best this data should be treated as a non-random sample of CVRs. Nevertheless, it still contains almost 1 billion choices in elections at all levels of government and in localities of all kinds from all over the country, representing the choices of roughly 50 million voters. See @fig-map for the full distribution of counties. I remove all uncontested races, and all races where a voter could select more than one candidate (although see @sec-potential-extensions). In addition, I subset my data to a random selection of $100,000$ voters and $2.3$ million choices in Colorado, to make computation tractable. Colorado has some of the best coverage of any state in the data -- nearly every county is represented and the state already has a decent partisan and demographic mix so that I think of it as a good benchmark for how the model would perform in every other state.
 
-![Cast Vote Record Distribution](writing/images/county_map2.jpeg){#fig-map}
+![Cast Vote Record Distribution](figs/cd_map.png){#fig-map}
 
 # Model Estimation
 
 Since I am attempting to estimate a continuous, latent, scale using only discrete information on each voter, I follow in the footsteps of other researchers in this topic and estimate an Item-Response Theory (IRT) model [@lewis2001; @clinton2004; @martin2002]. A common specification of the IRT model, reformulated from @jackman2009, is the "two-parameter" model. Subscripts and quantities of interest can be found in @tbl-terms.
 
 $$
-\pi_{jk} = Pr(y_{jk} = c | \alpha_j, \gamma_{k(c)}, \beta_{k(c)}) = F(\alpha_j \gamma_{k(c)} - beta_{k(c)})
+\pi_{jk} = Pr(y_{jk} = c | \alpha_j, \gamma_{k(c)}, \beta_{k(c)}) = F(\alpha_j \gamma_{k(c)} - \beta_{k(c)})
 $$ {#eq-irt}
 
 | Quantity                       | Symbol           |
@@ -109,100 +104,29 @@ $$
 
 As it stands, the model is not identified. Simply put, the scales of $\alpha$ are not set and it can be easily multiplied by any factor or shifted by any constant and the model will behave just the same. Similarly, the sign of $\gamma$ can vacillate with a corresponding switch in the sign of $\alpha$ and result in the same behavior. Therefore, a number of identification restrictions must be imposed. For a more full discussion of these conditions, see @jackman2009, @clinton2004, and @rivers2003. I choose to normalize the latent trait to mean 0 and standard deviation 1, which I impose both in post-processing and by setting a strong standard normal prior. I also impose the restriction that $\gamma$ must always be positive, thus fixing its sign.
 
-I start by fitting a simple Rasch model. I estimate the following Bernoulli model using `brms`.[^1] All models are run for 4 chains, with 1000 warm-up iterations and then 1000 sampling iterations. Trace plots are too numerous to display, so @fig-rhats instead plots the $\hat{R}$ value for every parameter in the model. As can be seen in the first two panels, all $\hat{R}$ values are extremely close to 1, indicating the model has converged well.
+I start by fitting a simple Rasch model. I estimate the previous Bernoulli model using `brms`.[^1] All models are run for 4 chains, with 1000 warm-up iterations and then 1000 sampling iterations. Trace plots are too numerous to display in full, but samples can be found in @sec-traces, all of which indicate good convergence. In addition, @afig-rhats plots the $\hat{R}$ value for every parameter in the model. As can be seen in the first two panels, all $\hat{R}$ values are extremely close to 1, indicating the model has converged well.
 
 [^1]: Relevant code snippets can be found in @sec-code.
 
-![Distribution of Gelman-Rubin Diagnostic](figs/rhat_comparison.jpg){#fig-rhats}
+Rasch models treat each race as equally important in determining the ideal point of a voter, so I only look at those ideal points. I randomly select some voters and plot their estimated ideal points in the left panel of @fig-bernoulli-ideals. These estimates generally make sense; voters far on the left side of 0 cast straight-ticket Democrat ballots whereas voters on the far right cast straight-ticket Republican ballots. Voters in the middle tended to cast more split-ticket ballots. The different exact estimates are due to the differing impact of casting a ballot for the Republican in a specific race versus another, which is driven entirely by the difficulty parameter in the Rasch model but by both the difficulty and discrimination parameter in the 2PL model.
 
-Rasch models treat each race as equally important in determining the ideal point of a voter, so I only look at those ideal points. I randomly select 10 voters and plot their estimated ideal points in the left panel of @fig-bernoulli-ideals. These estimates generally make sense; voters 42 and 4 voted straight-ticket Democrat and voters 45 and 39 voted straight-ticket Republican, whereas voter 7 cast a more split-ticket. The different exact estimates are due to the differing impact of casting a ballot for the Republican in a specific race versus another, which is driven entirely by the difficulty parameter in the Rasch model but by both the difficulty and discrimination parameter in the 2PL model.
+I then proceed after the Rasch model to also fit a 2PL model, which allows the discrimination parameter to vary and be estimated, but requires them to be positive. As can be seen in the right panel of @fig-bernoulli-ideals, the estimates match up closely to the estimates from the Rasch model. That there isn't much difference makes sense given the context of US elections, where most voters choose the same party up and down the ballot, so no single race is likely to be more informative than others on their location on a latent scale. To confirm this, I directly plot the difficulty and discrimination parameters for a random set of races from the 2PL model in @fig-bernoulli-params. Although many of the races are significantly different from 0, most of those races are all quite similarly discriminatory. I don't want to read too much into these parameters, but the lack of wild variation suggests that they are all acting in a similar way to one another.
 
-I then proceed after the Rasch model to also fit a 2PL model, which allows the discrimination parameter to vary and be estimated. As can be seen in the right panel of @fig-bernoulli-ideals, the estimates match up closely to the estimates from the Rasch model. That there isn't much difference makes sense given the context of US elections, where most voters choose the same party up and down the ballot, so no single race is likely to be more informative than others on their location on a latent scale. To confirm this, I directly plot the difficulty and discrimination parameters for a random set of races from the 2PL model in @fig-bernoulli-params. Although many of the races are significantly different from 0, most of those races are all quite similarly discriminatory. I don't want to read too much into these parameters, but the lack of wild variation suggests that they are all acting in a similar way to one another.
+![Example Ideal Points from the Bernoulli Model](figs/ber_ideals.jpg){#fig-bernoulli-ideals}
 
-```{r}
-#| label: fig-bernoulli-ideals
-#| fig-cap: Example Ideal Points from the Bernoulli Model
-#| fig-width: 8
-#| fig-height: 6
-#| cache: true
-#| cache-lazy: true
-
-p1 <- ber_1pl |>
-   spread_draws(r_cvr_id[cvr_id, var]) |>
-   mutate(alpha = r_cvr_id/sd(r_cvr_id)) |>
-   filter(cvr_id < 50) |> 
-   ggplot(aes(x = alpha, y = as.character(cvr_id))) +
-   stat_halfeye() +
-   geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-   labs(x = expression(alpha), y = "Voter Group", title = "Rasch Model")
-
-p2 <- ber_2pl |> 
-  spread_draws(r_cvr_id__alpha[cvr_id,]) |> 
-  mutate(alpha = r_cvr_id__alpha/sd(r_cvr_id__alpha)) |> 
-  filter(cvr_id < 50) |> 
-  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
-  stat_halfeye() +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  labs(x = expression(alpha), y = "", title = "2PL Model")
-
-p1 + p2 & theme_medsl()
-
-```
-
-```{r}
-#| label: fig-bernoulli-params
-#| fig-cap: Discrimination and Difficulty Parameters from the Bernoulli Model
-#| fig-height: 8
-#| fig-width: 8
-
-person_pars_2pl <- ranef(ber_2pl, summary = FALSE)$cvr_id[, , "alpha_Intercept"] 
-person_sds_2pl <- apply(person_pars_2pl, 1, sd)
-item_pars_2pl <- coef(ber_2pl, summary = FALSE)$race
-  
-# locations
-beta <- item_pars_2pl[, , "beta_Intercept"] |>
-  as_tibble() |> 
-  pivot_longer(cols = everything(), names_to = "race") |> 
-  mutate(race = str_remove(race, fixed(", ")) |> str_squish()) |> 
-  mutate(nlpar = "beta")
-
-random_races <- beta |> 
-  distinct(race) |> 
-  slice_sample(n=12) |> 
-  bind_rows(tibble(race = c("US PRESIDENT - STATEWIDE", "US SENATE - STATEWIDE"))) |> 
-  distinct(race)
-
-# slopes
-gamma <- item_pars_2pl[, , "loggamma_Intercept"] |>
-  exp() |> 
-  sweep(1, person_sds_2pl, "*") |>
-  as_tibble() |> 
-  pivot_longer(cols = everything(), names_to = "race") |> 
-  mutate(nlpar = "gamma") |> 
-  mutate(race = str_remove(race, fixed(", ")) |> str_squish()) 
-
-bind_rows(beta, gamma) |>
-  inner_join(random_races) |> 
-  mutate(nlpar = factor(nlpar, labels = c("Difficulty", "Discrimination"))) |>
-  ggplot(aes(x = value, y = race)) +
-  stat_pointinterval() +
-  geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
-  facet_wrap(~ nlpar, scales = "free_x") +
-  labs(y = "", x = "") +
-  theme_medsl()
-```
+![Discrimination and Difficulty Parameters from the Bernoulli Model](figs/ber_params.jpg){#fig-bernoulli-params}
 
 ## Categorical Outcomes
 
 The categorical model is nearly the same as the Bernoulli model, with some slight modifications. @eq-irt becomes the following, where $F(\cdot)$ is the softmax function, a multivariate generalization of the inverse logit function.
 
 $$
-\pi_{jk} = Pr(y_{jk} = c | \alpha_j, \gamma_{k(c)}, \beta_{k(c)}) = F(\alpha_j \gamma_{k(c)} - \beta_{k(c)})
+\pi_{jk(c)} = Pr(y_{jk} = c | \alpha_j, \gamma_{k(c)}, \beta_{k(c)}) = F(\alpha_j \gamma_{k(c)} - \beta_{k(c)})
 $$
 
 In the categorical model, as with all models where the outcome is categorical, a reference category must be set. This is important for the estimates of the discriminatory and difficulty parameters, which are now all in reference to the reference candidate in each race. This makes them difficult to interpret and so I will mostly focus on estimates of the ideal points.
 
-One notable difference in the categorical model are the identification restrictions. The same normalization applies to $\alpha$, but now I must relax the assumption that $\gamma$ is strictly positive, since it is defined in relation to the reference candidate. There is no *a priori* reason to fix one candidate as the least discriminatory, so I cannot fix the sign of $\gamma$. Instead, I let the parameter be unidentified, and use post-processing to flip the signs of $\gamma$ and $\alpha$ to the most modal side of $\gamma$s distribution. Even after this post-processing, some of the distributions of the latent traits still exhibit some bimodality, which I am not sure exactly where to attribute. It could be just that in some draws the values are close to zero, and so the vacillating signs does not clearly identify the model. I expect that adding informative priors on $\gamma$, as discussed in @sec-potential-extensions, could help with this problem.
+One notable difference in the categorical model are the identification restrictions. The same normalization applies to $\alpha$, but now I must relax the assumption that $\gamma$ is strictly positive, since it is defined in relation to the reference candidate. There is no *a priori* reason to fix one candidate as the least discriminatory, so I cannot fix the sign of $\gamma$. Instead, I let the parameter be unidentified, and use post-processing to flip the signs of $\gamma$ and $\alpha$ to the most modal side of $\gamma$s distribution. Even after this post-processing, some of the distributions of the latent traits still exhibit some bimodality, which I am not sure exactly where to attribute. It could be just that in some draws the values are close to zero, and so the vacillating signs does not clearly identify the model. I expect that adding informative priors on $\gamma$, as discussed in @sec-potential-extensions, could help with this problem. Additionally, I intend in a future version of this project to implement the Rotation-Sign-Permutation (RSP) algorithm described by @papastamoulis2022, which is a more precise way to identify latent factors in Bayesian models than the simple approach I have taken here. I expect that RSP will resolve the remaining bimodality seen in the distribution of the latent traits.
 
 I estimate this model on a smaller subset of the Colorado data, using only voters from Adams County, a large county that covers the northeast corner of Denver and some rural areas outside of Denver. This constitutes a sample size of $5,824$ voters with $189,462$ choices.
 
@@ -210,182 +134,17 @@ The varying-races, varying-choices structure of election data in does not work w
 
 In @fig-cat-ideals I plot a similar set of example ideal points for 14 random voters (these are NOT the same voters as in @fig-bernoulli-ideals). The categorical model has a lot more variation than the Bernoulli model, which makes sense since we are allowing each voter to have a more complicated representation of their choices, rather than just whether they picked the Republican or not. To further provide evidence that the models are converging to something reasonable, I plot the distribution of all draws of the ideal points for Trump and Biden voters in @fig-cat-presvote. This plot shows that BIden voters are consistently on the left-side of the median, but closer to the middle than their counterparts, Trump voters. Since Trump voters are generally considered a bit more conservative than Biden voters are considered liberal, these results seem to be facially valid given anecdotal knowledge about the American electorate.
 
-```{r}
-#| label: fig-cat-ideals
-#| fig-cap: Example Ideal Points from the Categorical Model
-#| fig-width: 8
-#| fig-height: 6
+![Example Ideal Points from the Categorical Model](figs/cat_ideals.jpg){#fig-cat-ideals}
 
-cat_2pl |> 
-  spread_draws(alpha[cvr_id]) |> 
-  ungroup() |> 
-  mutate(alpha = (alpha - mean(alpha))/sd(alpha)) |> 
-  filter(cvr_id < 15) |> 
-  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
-  stat_halfeye() +
-  theme_bw() +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  labs(x = expression(alpha), y = "Voter") +
-  theme_medsl()
-
-```
-
-```{r}
-#| label: fig-cat-presvote
-#| fig-cap: Distribution of Ideal Points of Voters for Trump and Biden voters
-#| fig-width: 8
-
-data <- tar_read(data_base_adams) |> 
-  # propositions are not quite right
-  mutate(candidate = case_when(
-    str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
-    TRUE ~ candidate
-  ),
-  race = str_remove(race, ", "))
-
-# Assign unique IDs to races and candidates
-races <- data |> 
-  distinct(race) |> 
-  arrange(race) |> 
-  mutate(race_id = row_number())
-
-candidates <- data |> 
-  distinct(race, candidate) |> 
-  arrange(race, candidate) |>
-  select(candidate) |>
-  mutate(candidate_id = row_number())
-
-# Join back to the original data
-df <- data |> 
-  left_join(races, by = "race") |> 
-  left_join(candidates, by = "candidate")
-
-# some races are not classified perfectly in districts rn so they would show up as list-columns (bad)
-bad_races <- df |> 
-  count(cvr_id, race_id) |> 
-  filter(n > 1) |> 
-  distinct(race_id) |> 
-  pull(race_id)
-
-df <- df |> 
-  filter(!(race_id %in% bad_races)) |>
-  drop_na(race_id, candidate_id)
-
-pres_choices <- df |>
-  filter(office == "US PRESIDENT") |>
-  distinct(cvr_id, candidate) |> 
-  mutate(candidate = str_squish(candidate)) |> 
-  mutate(candidate = case_match(
-    candidate,
-    "JOSEPH KISHORE NORISSA SANTA CRUZ" ~ "JOSEPH KISHORE",
-    "JORDAN CANCER SCOTT JENNIFER TEPOOL" ~ "JORDAN SCOTT",
-    "BILL HAMMONS ERIC BODENSTAB" ~ "BILL HAMMONS",
-    "MARK CHARLES ADRIAN WALLACE" ~ "MARK CHARLES",
-    "PRINCESS KHADIJAH MARYAM JACOB FAMBRO KHADIJAH MARYAM JACOB SR" ~ "PRINCESS KHADIJAH JACOB-FAMBRO",
-    "KYLE KENLEY KOPITKE NATHAN RE VO SORENSON" ~ "KYLE KENLEY",
-    "JOE MC HUGH ELIZABETH STORM" ~ "JOE MCHUGH",
-    "BLAKE HUBER FRANK ATWOOD" ~ "BLAKE HUBER",
-    "PHIL COLLINS BILLY JOE PARKER" ~ "PHIL COLLINS",
-    .default = candidate
-  ))
-
-voters <- df |> 
-  select(cvr_id, race_id, candidate_id) |> 
-  arrange(race_id, candidate_id) |> 
-  distinct(cvr_id) |> 
-  mutate(id = row_number()) |> 
-  left_join(pres_choices)
-
-joined <- cat_2pl |> 
-  spread_draws(alpha[id]) |> 
-  ungroup() |> 
-  mutate(alpha = alpha/sd(alpha)) |> 
-  left_join(voters, join_by(id)) |> 
-  drop_na(candidate) 
-
-joined |> 
-  filter(candidate %in% c("JOSEPH R BIDEN", "DONALD J TRUMP")) |> 
-  ggplot(aes(x = alpha, fill = candidate, y = candidate)) +
-  ggridges::geom_density_ridges(scale = 1) +
-  scale_fill_discrete(type = c("#F6573E", "#3791FF"), guide = "none") +
-  labs(x = expression(alpha), y = "", fill = "Candidate") +
-  theme_medsl()
-
-```
+![Distribution of Ideal Points of Voters for Trump and Biden Voters](figs/cat_aggregated.jpg){#fig-cat-presvote}
 
 One advantage of the categorical model is that I can also replicate these results for all candidates in the presidential race in Colorado. The distributions of ideal points of voters who cast ballots for each of the third-party candidates is shown in @fig-cat-presvote-others. These results generally make sense, candidates like Gloria La Riva (Socialist Party) are on the left side of the scale, while candidates like Don Blankenship (Constitution Party) and Jo Jorgensen (Libertarian Party) are on the right side of the scale. Some candidates, like Rocque de la Fuente have a strongly bimodal distribution which could indicate that they're receiving votes from people on both sides of the aisle. However, as is true for many of these third-party candidates (particularly Kanye West), perhaps the single-dimension assumption imposed by my model doesn't appropriately describe the type of voter who would cast ballots for these candidates.
 
-```{r}
-#| label: fig-cat-presvote-others
-#| fig-cap: Distribution of Ideal Points of Voters for Third Party Presidential Candidates
-#| fig-height: 8
-#| fig-width: 8
-
-joined |> 
-  filter(!(candidate %in% c("JOSEPH R BIDEN", "DONALD J TRUMP"))) |> 
-  ggplot(aes(x = alpha, y = candidate)) +
-  ggridges::geom_density_ridges(fill = "#C0BA79", scale = 1) +
-  theme_bw() +
-  geom_vline(xintercept = 0, linetype = "dashed") +
-  labs(x = expression(alpha), y = "") +
-  theme_medsl()
-
-```
+![Distribution of Ideal Points of Voters for Third Party Presidential Candidates](figs/cat_aggregated_others.jpg){#fig-cat-presvote-others}
 
 For the categorical model, I also plot the discrimination and difficulty parameters for the presidential race in @fig-cat-params. Because both of these parameters are defined in reference to the baseline category (Bill Hammons, in this case), they are challenging to interpret in any meaningful way. In particular, although their credible intervals all cross zero, it looks like votes for Biden or for Trump are more informative (although in contradicting signs) than a vote for Howie Hawkins on a voter's underlying latent trait. This makes sense given our prior knowledge about American voters.
 
-```{r}
-#| label: fig-cat-params
-#| fig-cap: Discrimination and Difficulty Parameters from the Categorical Model
-#| fig-height: 8
-#| fig-width: 8
-
-sds <- cat_2pl |> 
-  spread_draws(alpha[cvr_id]) |> 
-  ungroup() |> 
-  summarise(sd = sd(alpha), .by = ".draw") |> 
-  pull(sd)
-
-draws <- cat_2pl |> 
-  as_draws_df() |>
-  select(starts_with("beta["), starts_with("gamma[")) |> 
-  sweep(1, sds, "*") |> 
-  mutate(across(everything(), ~ na_if(.x, 0))) |> 
-  pivot_longer(cols = everything(), values_drop_na = TRUE) |> 
-  separate_wider_delim(cols = name, delim = "[", names = c("parameter", "race_id")) |> 
-  separate_wider_delim(cols = race_id, delim = ",", names = c("race_id", "candidate_id")) |> 
-  mutate(candidate_id = str_remove(candidate_id, "]")) |> 
-  mutate(race_id = as.numeric(race_id),
-         candidate_id = as.numeric(candidate_id)) |>
-  left_join(races) |> 
-  left_join(candidates) |> 
-  mutate(candidate = str_squish(candidate)) |> 
-  mutate(candidate = case_match(
-    candidate,
-    "JOSEPH KISHORE NORISSA SANTA CRUZ" ~ "JOSEPH KISHORE",
-    "JORDAN CANCER SCOTT JENNIFER TEPOOL" ~ "JORDAN SCOTT",
-    "BILL HAMMONS ERIC BODENSTAB" ~ "BILL HAMMONS",
-    "MARK CHARLES ADRIAN WALLACE" ~ "MARK CHARLES",
-    "PRINCESS KHADIJAH MARYAM JACOB FAMBRO KHADIJAH MARYAM JACOB SR" ~ "PRINCESS KHADIJAH JACOB-FAMBRO",
-    "KYLE KENLEY KOPITKE NATHAN RE VO SORENSON" ~ "KYLE KENLEY",
-    "JOE MC HUGH ELIZABETH STORM" ~ "JOE MCHUGH",
-    "BLAKE HUBER FRANK ATWOOD" ~ "BLAKE HUBER",
-    "PHIL COLLINS BILLY JOE PARKER" ~ "PHIL COLLINS",
-    .default = candidate
-  ))
-
-draws |> 
-  filter(str_detect(race, "US PRESIDENT")) |> 
-  mutate(race = str_remove(race, " - STATEWIDE")) |> 
-  mutate(parameter = factor(parameter, labels = c("Difficulty", "Discrimination"))) |>
-  ggplot(aes(x = value, y = candidate)) +
-  stat_halfeye() +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  facet_wrap(~ parameter, scales = "free_x") +
-  labs(x = "", y = "") +
-  theme_medsl()
-
-```
+![Discrimination and Difficulty Parameters from the Categorical Model](figs/cat_params.jpg){#fig-cat-params}
 
 ## Comparison to DIME Scores
 
@@ -417,13 +176,13 @@ Third, previous research using IRT models and vote behaviors [@poole_patterns_19
 
 \appendix
 
-\renewcommand{\thefigure}{A\arabic{figure}}
+<!-- \renewcommand{\thefigure}{A\arabic{figure}} -->
 
-\renewcommand{\thetable}{A\arabic{table}}
+<!-- \renewcommand{\thetable}{A\arabic{table}} -->
 
-\setcounter{figure}{0}
+<!-- \setcounter{figure}{0} -->
 
-\setcounter{table}{0}
+<!-- \setcounter{table}{0} -->
 :::
 
 # Appendix {.appendix}
@@ -512,13 +271,13 @@ functions {
 }
 
 data {
-  int<lower=0, upper=1> parallelize; // should the code be run using within-chain threading?
+  int<lower=0, upper=1> parallelize;
   int<lower=1> J; // number of voters
   int<lower=1> K; // number of races
   int<lower=1> C; // number of candidates
-  array[K, C] int<lower=0, upper=1> candidates; // candidate availability matrix for each race
-  array[J, K] int<lower=0, upper=C> votes; // votes matrix (0 if not voting in that race)
-  array[J, K] int<lower=0, upper=1> eligibility; // 1 if voter is eligible for race, 0 otherwise
+  array[K, C] int<lower=0, upper=1> candidates;
+  array[J, K] int<lower=0, upper=C> votes;
+  array[J, K] int<lower=0, upper=1> eligibility;
 }
 
 parameters {
@@ -570,43 +329,12 @@ model {
 }
 ```
 
-## Convergence Diagnostics
+## Convergence Diagnostics {#sec-traces}
 
-```{r}
-#| label: fig-trace-ber1
-#| fig-cap: Traceplots for 24 random parameters in the Bernoulli Rasch Model
-#| fig-height: 12
-#| fig-width: 10
+![Traceplots for 24 random parameters in the Bernoulli Rasch Model](figs/ber_1pl_trace.jpeg){#afig-trace-ber1}
 
-vars <- get_variables(ber_1pl) |> sample(size = 24)
+![Traceplots for 24 random parameters in the Bernoulli 2PL Model](figs/ber_2pl_trace.jpeg){#afig-trace-ber2}
 
-mcmc_trace(ber_1pl, pars = vars, ncol = 3)
+![Traceplots for 24 random parameters in the Categorical 2PL Model](figs/cat_2pl_trace.jpeg){#afig-trace-cat}
 
-```
-
-```{r}
-#| label: fig-trace-ber2
-#| fig-cap: Traceplots for 24 random parameters in the Bernoulli 2PL Model
-#| fig-height: 12
-#| fig-width: 12
-
-vars <- get_variables(ber_2pl) |> sample(size = 24)
-
-mcmc_trace(ber_2pl, pars = vars, ncol = 3)
-```
-
-```{r}
-#| label: fig-trace-cat
-#| fig-cap: Traceplots for 24 random parameters in the Categorical 2PL Model
-#| fig-height: 12
-#| fig-width: 10
-
-vars <- summarise_draws(cat_2pl) |> 
-  filter(mean > 0.1 | mean < -0.1, !str_detect(variable, "raw")) |> 
-  slice_sample(n=24) |> 
-  pull(variable)
-
-mcmc_trace(cat_2pl,
-           pars = vars, 
-           ncol = 3)
-```
+![Distribution of Gelman-Rubin Diagnostic](figs/rhat_comparison.jpg){#afig-rhats}
