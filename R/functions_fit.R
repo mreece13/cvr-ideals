@@ -57,7 +57,7 @@ fit_stan <- function(model, stan_data, file_name){
     iter_warmup = 1000,
     iter_sampling = 1000,
     seed = 02139,
-    parallel_chains = 4
+    parallel_chains = 4,
     threads_per_chain = 20
   )
   
