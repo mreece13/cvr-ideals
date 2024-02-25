@@ -156,6 +156,7 @@ get_stan_data <- function(data){
   
   # Prepare data for Stan
   stan_data <- list(
+    threaded = 1,
     J = n_distinct(df$cvr_id),
     K = max(ids$race_id),
     C = n_distinct(ids$candidate),

@@ -1,7 +1,28 @@
 // Categorical 2PL IRT Model
 // Streamlined version
+functions {
+  real partial_sum(array[, ] int votes_slice,
+                   int start, int end, int k,
+                   vector alpha,
+                   vector beta_s,
+                   vector gamma_s) {
+                     
+    int N_slice = end - start + 1;
+    vector[N_slice] alpha_slice = alpha[start:end];
+
+    real partial_log_lik = 0;
+    
+    for (j in 1:N_slice){
+        if (votes_slice[j, k] > 0){
+          partial_log_lik += categorical_logit_lpmf(votes_slice[j, k] | gamma_s .* (alpha[j] - beta_s));
+        }
+      }
+    
+    return partial_log_lik;
+  }
+}
 data {
-  // int<lower=0, upper=1> parallelize; // should the code be run using within-chain threading?
+  int<lower=0, upper=1> threaded; // should the code be run using within-chain threading?
   int<lower=1> J; // number of voters
   int<lower=1> K; // number of races
   int<lower=1> C; // number of candidates
@@ -58,14 +79,26 @@ model {
     segment(beta_raw, pos_target, s) ~ normal(0, sigma_beta);
     segment(gamma_raw, pos_target, s) ~ normal(0, sigma_gamma);
     
-    // likelihood
-    for (j in 1:J){
-      if (votes[j, k] > 0){
-        votes[j, k] ~ categorical_logit(segment(gamma, pos_target, s) .* (alpha[j] - segment(beta, pos_target, s)));
+    vector[s] gamma_s = segment(gamma, pos_target, s);
+    vector[s] beta_s = segment(beta, pos_target, s);
+    
+    if (threaded == 1){
+      
+      target += reduce_sum(partial_sum, votes, 1, k, alpha, beta_s, gamma_s);
+      
+    } else if (threaded == 0){
+      
+      // likelihood
+      for (j in 1:J){
+        if (votes[j, k] > 0){
+           target += categorical_logit_lpmf(votes[j, k] | gamma_s .* (alpha[j] - beta_s));
+        }
       }
+      
     }
     
     // iterate to next race
     pos_target += s;
+    
   }
 }

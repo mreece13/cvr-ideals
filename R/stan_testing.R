@@ -42,6 +42,7 @@ sizes <- df |>
 
 # Prepare data for Stan
 stan_data <- list(
+  threaded = 1,
   J = n_distinct(df$cvr_id),
   K = max(ids$race_id),
   C = n_distinct(ids$candidate),
@@ -49,11 +50,8 @@ stan_data <- list(
   sizes = sizes
 )
 
-m <- cmdstan_model("R/cat_2pl_streamlined.stan",
-                   # compile = TRUE,
-                   # cpp_options = list(stan_threads = TRUE),
-                   # force_recompile = TRUE
-                   )
+m <- cmdstan_model("R/cat_2pl_streamlined.stan", compile = FALSE)
+m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = FALSE)
 
 fit <- m$sample(
   data = stan_data,
@@ -61,7 +59,8 @@ fit <- m$sample(
   iter_warmup = 1000,
   iter_sampling = 1000,
   seed = 02139,
-  parallel_chains = 4
+  parallel_chains = 4,
+  threads_per_chain = 4
 )
 
 fit <- m$pathfinder(
