@@ -131,7 +131,7 @@ get_stan_data <- function(data){
                          "DISTRICT COURT JUDGE - 17", "SUPREME COURT JUSTICE - STATEWIDE")))
   
   # Assign unique IDs to races and candidates
-  ids <- data |> 
+  ids <- df |> 
     distinct(race, candidate) |> 
     arrange(race, candidate) |> 
     group_by(race) |> 
@@ -139,7 +139,7 @@ get_stan_data <- function(data){
            race_id = cur_group_id())
   
   # Join back to the original data
-  df <- left_join(data, ids, join_by(race, candidate))
+  df <- left_join(df, ids, join_by(race, candidate))
   
   # Create the votes matrix
   votes_matrix <- df |> 
