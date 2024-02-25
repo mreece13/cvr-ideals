@@ -14,7 +14,7 @@ functions {
     
     for (j in 1:N_slice){
         if (votes_slice[j, k] > 0){
-          partial_log_lik += categorical_logit_lpmf(votes_slice[j, k] | gamma_s .* (alpha[j] - beta_s));
+          partial_log_lik += categorical_logit_lpmf(votes_slice[j, k] | gamma_s .* (alpha_slice[j] - beta_s));
         }
       }
     
