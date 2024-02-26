@@ -6,15 +6,8 @@ library(tidybayes)
 library(bayesplot)
 library(cmdstanr)
 
-data <- targets::tar_read(data_base_adams) |> 
-  # propositions are not quite right
-  mutate(candidate = case_when(
-    str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
-    TRUE ~ candidate
-  ),
-  race = str_remove(race, ", ADAMS")) |> 
-  filter(!(race %in% c("COUNTY JUDGE - ADAMS", "COURT OF APPEALS JUDGE - STATEWIDE", 
-                       "DISTRICT COURT JUDGE - 17", "SUPREME COURT JUSTICE - STATEWIDE")))
+data <- targets::tar_read(data_base) |> 
+  filter(candidate != "undervote")
 
 # Assign unique IDs to races and candidates
 ids <- data |> 
@@ -35,19 +28,19 @@ votes_matrix <- df |>
   select(-cvr_id) |> 
   as.matrix()
 
-sizes <- df |> 
+num_cands <- df |> 
   distinct(race, race_id, candidate) |> 
   count(race_id) |> 
   pull(n)
 
 # Prepare data for Stan
 stan_data <- list(
-  threaded = 1,
+  threaded = 0,
   J = n_distinct(df$cvr_id),
-  K = max(ids$race_id),
-  C = n_distinct(ids$candidate),
+  K = n_distinct(ids$race),
+  C = length(ids$candidate),
   votes = votes_matrix,
-  sizes = sizes
+  sizes = num_cands
 )
 
 m <- cmdstan_model("R/cat_2pl_streamlined.stan", compile = FALSE)
@@ -56,16 +49,13 @@ m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = FALSE)
 fit <- m$sample(
   data = stan_data,
   chains = 1,
-  iter_warmup = 1000,
-  iter_sampling = 1000,
-  seed = 02139,
-  parallel_chains = 4,
-  threads_per_chain = 4
+  iter_sampling = 200
 )
 
 fit <- m$pathfinder(
   data = stan_data,
-  seed = 02139
+  seed = 02139,
+  num_threads = 5
 )
 
 fit$save_object("fits/cat_2pl_streamlined2.rds")

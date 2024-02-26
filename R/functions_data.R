@@ -67,13 +67,8 @@ get_data <- function(path, st, partisan_only = FALSE, num = 1e9){
     inner_join(contested_races, by = c("county_name", "office", "district")) |> 
     mutate(choice_dem = as.numeric(party_detailed == "DEMOCRAT"),
            choice_rep = as.numeric(party_detailed == "REPUBLICAN")) |> 
-    collect() |> 
-    mutate(district = if_else(office %in% c("US HOUSE", "STATE SENATE", "STATE HOUSE", "US SENATE", 
-                                            "DISTRICT ATTORNEY", "CITY COUNCIL", "BOARD OF EDUCATION"), 
-                              str_remove(district, str_c(", ", county_name)),
-                              district)) |> 
-    mutate(district = ifelse(office %in% c("US SENATE", "US PRESIDENT"), "STATEWIDE", district)) |> 
-    mutate(race = str_c(office, district, sep = " - "))
+    mutate(race = str_c(office, district, sep = " - ")) |> 
+    collect()
 }
 
 filter_byCounty <- function(data, county){
@@ -120,18 +115,8 @@ group_voters <- function(data, categorical){
 
 get_stan_data <- function(data){
   
-  df <- data |> 
-    # propositions are not quite right
-    mutate(candidate = case_when(
-      str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
-      TRUE ~ candidate
-    ),
-    race = str_remove(race, ", ADAMS")) |> 
-    filter(!(race %in% c("COUNTY JUDGE - ADAMS", "COURT OF APPEALS JUDGE - STATEWIDE", 
-                         "DISTRICT COURT JUDGE - 17", "SUPREME COURT JUSTICE - STATEWIDE")))
-  
   # Assign unique IDs to races and candidates
-  ids <- df |> 
+  ids <- data |> 
     distinct(race, candidate) |> 
     arrange(race, candidate) |> 
     group_by(race) |> 
@@ -139,7 +124,7 @@ get_stan_data <- function(data){
            race_id = cur_group_id())
   
   # Join back to the original data
-  df <- left_join(df, ids, join_by(race, candidate))
+  df <- left_join(data, ids, join_by(race, candidate))
   
   # Create the votes matrix
   votes_matrix <- df |> 
@@ -149,7 +134,7 @@ get_stan_data <- function(data){
     select(-cvr_id) |> 
     as.matrix()
   
-  sizes <- df |> 
+  num_cands <- df |> 
     distinct(race, race_id, candidate) |> 
     count(race_id) |> 
     pull(n)
@@ -158,10 +143,10 @@ get_stan_data <- function(data){
   stan_data <- list(
     threaded = 0,
     J = n_distinct(df$cvr_id),
-    K = max(ids$race_id),
-    C = n_distinct(ids$candidate),
+    K = n_distinct(ids$race),
+    C = length(ids$candidate),
     votes = votes_matrix,
-    sizes = sizes
+    sizes = num_cands
   )
   
   return(stan_data)

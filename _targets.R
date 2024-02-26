@@ -19,9 +19,9 @@ tar_config_set(seconds_meta_append=15,
                seconds_reporter=0.5
                )
 list(
-  tar_target(cvr_path, "~/cvrs/data/cvr_qa_main/"),
+  tar_target(cvr_path, "../cvrs_shared/data/pass1/"),
   # tar_target(cvr_path, "~/Dropbox (MIT)/Research/cvrs/data/cvr_qa_main/"),
-  tar_target(data_base, get_data(path = cvr_path, st = "COLORADO", num=100000)),
+  tar_target(data_base, get_data(path = cvr_path, st = "COLORADO")),
   tar_target(data_colorado, get_data(path = cvr_path, st = "COLORADO", partisan_only = TRUE, num=100000)),
   tar_target(data_base_adams, filter_byCounty(data=data_base, county="ADAMS")),
   # tar_target(data_grouped_bernoulli, group_voters(data_colorado, categorical = FALSE)),
