@@ -48,8 +48,8 @@ fit_bernoulli <- function(data, type){
 
 fit_stan <- function(model, stan_data, file_name){
   
-  m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = FALSE)
-  m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = TRUE)
+  m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = TRUE)
+  # m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = TRUE)
   
   fit <- m$sample(
     data = stan_data,
