@@ -131,10 +131,10 @@ get_stan_data <- function(data){
   
   # Create the votes matrix
   votes_matrix <- df |> 
-    select(county_name, cvr_id, race_id, candidate_id) |> 
-    arrange(county_name, race_id, candidate_id) |>
+    select(cvr_id, race_id, candidate_id) |> 
+    arrange(race_id, candidate_id) |>
     pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |> 
-    select(-cvr_id, -county_name) |> 
+    select(-cvr_id) |> 
     as.matrix()
   
   num_cands <- df |> 
