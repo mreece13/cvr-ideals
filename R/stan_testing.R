@@ -5,8 +5,11 @@ library(tidyverse)
 library(tidybayes)
 library(bayesplot)
 library(cmdstanr)
+library(posterior)
 
-data <- targets::tar_read(data_base) |> 
+source("../medsl_theme.R")
+
+data <- targets::tar_read(data_base_adams) |> 
   filter(candidate != "undervote")
 
 # Assign unique IDs to races and candidates
@@ -66,7 +69,7 @@ fit <- read_rds("fits/cat_2pl_streamlined.rds")
 
 pres_choices <- df |>
   filter(office == "US PRESIDENT") |>
-  distinct(cvr_id, candidate) |> 
+  distinct(county_name, cvr_id, candidate) |> 
   mutate(candidate = str_squish(candidate)) |> 
   mutate(candidate = case_match(
     candidate,
@@ -83,20 +86,30 @@ pres_choices <- df |>
   ))
 
 voters <- df |> 
-  select(cvr_id, race_id, candidate_id) |> 
+  select(county_name, cvr_id, race_id, candidate_id) |> 
   arrange(race_id, candidate_id) |> 
-  distinct(cvr_id) |> 
+  distinct(county_name, cvr_id) |> 
   mutate(id = 1:n()) |> 
   left_join(pres_choices)
 
 joined <- fit |> 
-  spread_draws(alpha[id], ndraws = 1) |> 
-  ungroup() |> 
+  as_draws_df() |> 
+  slice_head(n=1) |> 
+  select(starts_with("alpha")) |> 
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "alpha") |> 
+  mutate(id = str_extract(variable, "\\d+") |> as.numeric()) |>
   mutate(alpha = alpha/sd(alpha)) |> 
   left_join(voters, join_by(id)) |> 
-  drop_na(candidate) 
+  drop_na(candidate)
 
-joined |> 
+# joined <- fit |> 
+#   spread_draws(alpha[id], ndraws = 1) |> 
+#   ungroup() |> 
+#   mutate(alpha = alpha/sd(alpha)) |> 
+#   left_join(voters, join_by(id)) |> 
+#   drop_na(candidate) 
+
+p_agg_main <- joined |> 
   filter(candidate %in% c("JOSEPH R BIDEN", "DONALD J TRUMP")) |> 
   # mutate(alpha = alpha*-1) |> 
   ggplot(aes(x = alpha, fill = candidate, y = candidate)) +
@@ -105,10 +118,10 @@ joined |>
   labs(x = expression(alpha), y = "", fill = "Candidate") +
   theme_medsl()
 
-joined |> 
+p_agg_others <- joined |> 
   filter(!(candidate %in% c("JOSEPH R BIDEN", "DONALD J TRUMP"))) |> 
   filter(n() > 5, .by = candidate) |> 
-  mutate(alpha = alpha*-1) |> 
+  # mutate(alpha = alpha*-1) |> 
   ggplot(aes(x = alpha, y = candidate)) +
   ggridges::geom_density_ridges(fill = "#C0BA79", scale = 1, panel_scaling = FALSE) +
   theme_bw() +
@@ -116,11 +129,16 @@ joined |>
   labs(x = expression(alpha), y = "") +
   theme_medsl()
 
+ggsave("figs/cat_aggregated_var.jpeg", plot = p_agg_main, width = 10, height = 6, units = "in")
+ggsave("figs/cat_aggregated_others_var.jpg", plot = p_agg_others, width = 10, height = 6, units = "in")
+
 sds <- fit |> 
-  spread_draws(alpha[cvr_id], ndraws = 1) |> 
-  ungroup() |> 
-  summarise(sd = sd(alpha), .by = ".draw") |> 
-  pull(sd)
+  as_draws_df() |> 
+  slice_head(n=1) |> 
+  select(starts_with("alpha")) |> 
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "alpha") |> 
+  pull(alpha) |> 
+  sd()
 
 params <- fit |> 
   posterior::as_draws_df() |> 
@@ -132,6 +150,8 @@ params <- fit |>
   mutate(name = str_remove(name, "\\[.*?$")) |> 
   select(name, race, candidate, value)
 
+targets::tar_read(stan_data)
+
 p <- params |> 
   filter(str_detect(race, "US PRESIDENT")) |> 
   ggplot(aes(x = value, y = candidate)) +
@@ -139,4 +159,4 @@ p <- params |>
   facet_wrap(~ name) +
   theme_bw()
 
-ggsave("figs/params.jpeg", plot = p, width = 8, height = 8, units = "in")
+ggsave("figs/params_var.jpeg", plot = p, width = 8, height = 8, units = "in")
