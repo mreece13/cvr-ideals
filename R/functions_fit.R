@@ -48,6 +48,8 @@ fit_bernoulli <- function(data, type){
 
 fit_stan <- function(model, stan_data, file_name){
   
+  print(str_c("Total voters in this data: ", as.character(stan_data$J)))
+  
   m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = TRUE)
   # m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = TRUE)
   # m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = TRUE)

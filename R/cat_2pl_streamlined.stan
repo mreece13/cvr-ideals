@@ -48,11 +48,7 @@ transformed parameters {
     int pos_params = 0;
     
     for (k in 1:K){
-      // print("working on race ", k, " with size ", sizes[k]);
-      
       for (c in 2:sizes[k]){
-        // print("iteration ", c, " with overall iteration ", pos_params);
-        
         beta[pos_params + c] = beta_raw[pos_params + c] + mu_beta;
         gamma[pos_params + c] = gamma_raw[pos_params + c];
       }
@@ -64,40 +60,36 @@ transformed parameters {
 
 model {
   // Priors
-  profile("priors"){
-    mu_beta ~ student_t(3, 0, 2.5);
-    alpha ~ std_normal(); // set to N(0, 1) for identification
-    sigma_beta ~ student_t(3, 0, 2.5);
-    sigma_gamma ~ student_t(3, 0, 2.5);
-  }
+  mu_beta ~ student_t(3, 0, 2.5);
+  alpha ~ std_normal(); // set to N(0, 1) for identification
+  sigma_beta ~ student_t(3, 0, 2.5);
+  sigma_gamma ~ student_t(3, 0, 2.5);
   
   int pos_target = 1;
   
-  profile("likelihood"){
-    for (k in 1:K) {
-      int s = sizes[k];
-      
-      // move on to the next race if we don't use this one for whatever reason
-      if (s == 0){
-        continue;
-      }
-      
-      // set hierarchical priors
-      segment(beta_raw, pos_target, s) ~ normal(0, sigma_beta);
-      segment(gamma_raw, pos_target, s) ~ normal(0, sigma_gamma);
-      
-      vector[s] gamma_s = segment(gamma, pos_target, s);
-      vector[s] beta_s = segment(beta, pos_target, s);
-      
-      for (j in 1:J){
-        if (votes[j, k] > 0){
-          votes[j, k] ~ categorical_logit(gamma_s .* alpha[j] - beta_s);
-        }
-      }
-      
-      // iterate to next race
-      pos_target += s;
-      
+  for (k in 1:K) {
+    int s = sizes[k];
+    
+    // move on to the next race if we don't use this one for whatever reason
+    if (s == 0){
+      continue;
     }
+    
+    // set hierarchical priors
+    segment(beta_raw, pos_target, s) ~ normal(0, sigma_beta);
+    segment(gamma_raw, pos_target, s) ~ normal(0, sigma_gamma);
+    
+    vector[s] gamma_s = segment(gamma, pos_target, s);
+    vector[s] beta_s = segment(beta, pos_target, s);
+    
+    for (j in 1:J){
+      if (votes[j, k] > 0){
+        votes[j, k] ~ categorical_logit(gamma_s .* alpha[j] - beta_s);
+      }
+    }
+    
+    // iterate to next race
+    pos_target += s;
+    
   }
 }
