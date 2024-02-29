@@ -134,7 +134,7 @@ get_stan_data <- function(data){
     select(county_name, cvr_id, race_id, candidate_id) |> 
     arrange(race_id, candidate_id) |>
     pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |> 
-    select(-cvr_id) |> 
+    select(-cvr_id, -county_name) |> 
     as.matrix()
   
   num_cands <- df |> 
