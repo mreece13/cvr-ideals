@@ -75,44 +75,6 @@ filter_byCounty <- function(data, county){
   filter(data, county_name == county)
 }
 
-pick_random_voters <- function(data, n){
-  slice_sample(distinct(data, cvr_id), n=n)
-}
-
-group_voters <- function(data, categorical){
-  
-  if (categorical){
-    uniques <- data |> 
-      arrange(race, candidate) |> 
-      mutate(choice = str_c(race, candidate, sep = "|")) |> 
-      select(state, county_name, cvr_id, choice) |> 
-      nest(data = choice) |> 
-      mutate(pattern = map_chr(data, ~ str_flatten(pull(.x, choice), collapse = "||")))
-    
-    grouped <- uniques |> 
-      left_join(count(uniques, pattern) |> mutate(group_id = as.character(row_number()))) |> 
-      select(state, county_name, data, n, group_id) |> 
-      unnest(cols = data) |> 
-      separate_wider_delim(choice, delim = "|", names = c("race", "candidate"))
-  } else {
-    uniques <- data |> 
-      arrange(race, candidate) |> 
-      mutate(choice = str_c(race, choice_rep, sep = "|")) |> 
-      select(state, county_name, cvr_id, choice) |> 
-      nest(data = choice) |> 
-      mutate(pattern = map_chr(data, ~ str_flatten(pull(.x, choice), collapse = "||")))
-    
-    grouped <- uniques |> 
-      left_join(count(uniques, pattern) |> mutate(group_id = as.character(row_number()))) |>
-      select(state, county_name, data, n, group_id) |> 
-      unnest(cols = data) |> 
-      separate_wider_delim(choice, delim = "|", names = c("race", "choice_rep"))
-    
-  }
-  
-  return(grouped)
-}
-
 get_stan_data <- function(data){
   
   # Assign unique IDs to races and candidates
