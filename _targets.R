@@ -11,6 +11,7 @@ options("future" = FALSE)
 tar_option_set(packages = c("tidyverse", "brms", "arrow", "tidybayes", "bayesplot", "cmdstanr"),
                memory = "transient", 
                format = "qs",
+               error = "null",
                garbage_collection = TRUE
 )
 tar_config_set(seconds_meta_append=15, 
