@@ -2,7 +2,7 @@
 
 fit_bernoulli <- function(data, type){
   
-  if (type == "rasch"){
+  if (type == "1pl"){
     form <- bf(
       choice_rep ~ 1 + (1 | race) + (1 | cvr_id),
       family = brmsfamily("bernoulli", link = "logit")
@@ -46,32 +46,37 @@ fit_bernoulli <- function(data, type){
   
 }
 
-fit_stan <- function(model, stan_data, file_name){
+fit_stan <- function(model, stan_data, file_name, variational = FALSE){
   
   print(str_c("Total voters in this data: ", as.character(stan_data$J)))
   
-  m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = TRUE)
-  # m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = TRUE)
-  # m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = TRUE)
-  # m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = TRUE)
-  
-  fit <- m$sample(
-    data = stan_data,
-    chains = 4,
-    iter_warmup = 1000,
-    iter_sampling = 1000,
-    seed = 02139,
-    parallel_chains = 4,
-    threads_per_chain = 20
-  )
-  
-  # fit <- m$pathfinder(
-  #   data = stan_data,
-  #   seed = 02139,
-  #   num_threads = 5
-  # )
-  
-  path <- str_c("fits/", file_name, "2.rds")
+  if (variational){
+    m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = FALSE)
+    m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = TRUE)
+    
+    fit <- m$pathfinder(
+      data = stan_data,
+      seed = 02139,
+      num_threads = 5
+    )
+    
+    path <- str_c("fits/", file_name, "_var.rds")
+    
+  } else {
+    m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = TRUE)
+    
+    fit <- m$sample(
+      data = stan_data,
+      chains = 4,
+      iter_warmup = 1000,
+      iter_sampling = 1000,
+      seed = 02139,
+      parallel_chains = 4
+      # threads_per_chain = 20
+    )
+    
+    path <- str_c("fits/", file_name, "_full.rds")
+  }
   
   fit$save_object(path)
   
