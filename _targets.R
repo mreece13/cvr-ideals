@@ -2,6 +2,7 @@ library(targets)
 
 source("R/functions_data.R")
 source("R/functions_fit.R")
+source("R/functions_plot.R")
 
 options("brms.threads" = 20)
 options("mc.cores" = 4)

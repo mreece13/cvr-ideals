@@ -60,7 +60,7 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE){
       num_threads = 5
     )
     
-    path <- str_c("fits/", file_name, "_var.rds")
+    path <- str_c("fits/", file_name, stan_data, "_var.rds")
     
   } else {
     m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = TRUE)
@@ -75,7 +75,7 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE){
       # threads_per_chain = 20
     )
     
-    path <- str_c("fits/", file_name, "_full.rds")
+    path <- str_c("fits/", file_name, stan_data, "_full.rds")
   }
   
   fit$save_object(path)
