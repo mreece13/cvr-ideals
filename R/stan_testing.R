@@ -9,7 +9,7 @@ library(posterior)
 
 source("../medsl_theme.R")
 
-data <- targets::tar_read(data_colorado) |> 
+data <- targets::tar_read(data_adams) |> 
   filter(candidate != "undervote")
 
 bad_races <- df |> 
