@@ -34,5 +34,10 @@ list(
   tar_target(stan_2pl, "R/cat_2pl_streamlined.stan", format = "file"),
   tar_target(fit_cat2pl_adams, fit_stan(stan_2pl, stan_data_adams, "cat_2pl_streamlined")),
   tar_target(fit_cat2pl_var_adams, fit_stan(stan_2pl, stan_data_adams, "cat_2pl_streamlined", variational = TRUE)),
-  tar_target(fit_cat2pl_var, fit_stan(stan_2pl, stan_data, "cat_2pl_streamlined", variational = TRUE))
+  tar_target(fit_cat2pl_var, fit_stan(stan_2pl, stan_data, "cat_2pl_streamlined", variational = TRUE)),
+  # plots
+  tar_target(p_ber_ideals, plot_ber_ideals(fit_bin_1pl, fit_bin_2pl)),
+  tar_target(p_ber_params, plot_ber_params(fit_bin_2pl)),
+  tar_target(p_traces, plot_traces(fit_bin_1pl, fit_bin_2pl, fit_cat2pl_adams)),
+  tar_target(p_rhats, plot_rhats(fit_bin_1pl, fit_bin_2pl, fit_cat2pl_adams))
 )
