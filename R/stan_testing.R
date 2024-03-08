@@ -9,8 +9,20 @@ library(posterior)
 
 source("../medsl_theme.R")
 
-data <- targets::tar_read(data_base_adams) |> 
+data <- targets::tar_read(data_colorado) |> 
   filter(candidate != "undervote")
+
+bad_races <- df |> 
+  count(county_name, cvr_id, race_id) |> 
+  filter(n > 1) |> 
+  distinct(race_id) |> 
+  pull(race_id)
+
+ids |> ungroup() |>  filter(race_id %in% bad_races) |> distinct(race)
+
+df |> 
+  filter(race == "STATE HOUSE - 058") |> 
+  filter(n() > 1, .by = cvr_id)
 
 # Assign unique IDs to races and candidates
 ids <- data |> 
