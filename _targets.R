@@ -3,21 +3,26 @@ library(targets)
 source("R/functions_data.R")
 source("R/functions_fit.R")
 source("R/functions_plot.R")
+source("medsl_theme.R")
 
 options("brms.threads" = 20)
 options("mc.cores" = 4)
 options("brms.backend" = "cmdstanr")
 options("future" = FALSE)
 
-tar_option_set(packages = c("tidyverse", "brms", "arrow", "tidybayes", "bayesplot", "cmdstanr"),
-               memory = "transient", 
-               format = "qs",
-               error = "null",
-               garbage_collection = TRUE
+tar_option_set(
+  packages = c("tidyverse", "brms", "arrow", "tidybayes", "bayesplot", "cmdstanr", "patchwork"),
+  memory = "transient", 
+  format = "qs",
+  error = "null",
+  garbage_collection = TRUE
 )
-tar_config_set(seconds_meta_append=15, 
-               seconds_reporter=0.5
-               )
+
+tar_config_set(
+  seconds_meta_append=15, 
+  seconds_reporter=0.5
+)
+
 list(
   # home directory for data
   tar_target(cvr_path, "../cvrs_shared/data/pass1/"),
