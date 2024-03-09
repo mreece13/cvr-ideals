@@ -12,19 +12,6 @@ library(posterior)
 
 source("../medsl_theme.R")
 
-m <- cmdstan_model("R/cat_2pl_gpu.stan", compile = TRUE)
-# m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = TRUE)
-
-fit <- m$sample(
-  data = stan_data,
-  chains = 4,
-  iter_warmup = 1000,
-  iter_sampling = 1000,
-  seed = 02139,
-  parallel_chains = 4,
-  threads_per_chain = 20
-)
-
 ###################################
 
 cat_2pl <- readRDS("fits/cat_2pl_streamlined_full.rds") |> 
