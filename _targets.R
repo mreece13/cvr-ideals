@@ -11,7 +11,7 @@ options("brms.backend" = "cmdstanr")
 options("future" = FALSE)
 
 tar_option_set(
-  packages = c("tidyverse", "brms", "arrow", "tidybayes", "bayesplot", "cmdstanr", "patchwork"),
+  packages = c("tidyverse", "brms", "arrow", "tidybayes", "bayesplot", "cmdstanr", "patchwork", "posterior"),
   memory = "transient", 
   format = "qs",
   error = "null",

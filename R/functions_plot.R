@@ -72,7 +72,7 @@ plot_ber_params <- function(ber_2pl){
 
 plot_traces <- function(ber_1pl, ber_2pl, cat_2pl_path){
   
-  cat_2pl <- readRDS(cat_2pl_path)
+  cat_2pl <- readRDS(cat_2pl_path) |> as_draws_df()
   
   trace_1 <- mcmc_trace(ber_1pl, pars = sample(get_variables(ber_1pl), size = 24))
   trace_2 <- mcmc_trace(ber_2pl, pars = sample(get_variables(ber_2pl), size = 24))
@@ -88,7 +88,7 @@ plot_traces <- function(ber_1pl, ber_2pl, cat_2pl_path){
   ggsave("figs/ber_2pl_trace.jpeg", trace_2, width = 12, height = 12, units = "in")
   ggsave("figs/cat_2pl_trace.jpeg", trace_3, width = 10, height = 12, units = "in")
   
-  return(list(trace_1, trace_2, trace_3))
+  return("COMPLETED")
   
 }
 
@@ -96,13 +96,13 @@ plot_rhats <- function(ber_1pl, ber_2pl, cat_2pl_path){
   
   cat_2pl <- readRDS(cat_2pl_path)
   
-  p_r1 <- tibble(r = rhat(ber_1pl)) |> 
+  p_r1 <- tibble(r = brms::rhat(ber_1pl)) |> 
     ggplot(aes(x = r)) +
     geom_dots() +
     scale_y_continuous(labels = NULL) +
     labs(title = "Bernoulli 1PL", x = expression(hat(R)), y = "")
   
-  p_r2 <- tibble(r = rhat(ber_2pl)) |> 
+  p_r2 <- tibble(r = brms::rhat(ber_2pl)) |> 
     ggplot(aes(x = r)) +
     geom_dots() +
     scale_y_continuous(labels = NULL) +
