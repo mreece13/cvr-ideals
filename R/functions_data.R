@@ -31,25 +31,30 @@ get_data <- function(path, st, partisan_only = FALSE, num = 1e9){
                               partitioning = c("state", "county_name"),
                               schema = partial_schema,
                               format = "parquet") |> 
-      filter(state == st, magnitude == "1", !is.na(office), !is.na(district)) |> 
+      filter(state == st, magnitude == "1", !is.na(office), !is.na(district), candidate != "undervote") |> 
       select(-magnitude) |> 
       mutate(race = str_c(office, district, sep = " - "))
   }
   
   # What are the contested races?
+  small_candidates <- base_data |> 
+    count(race, candidate) |> 
+    filter(n <= 20) |> 
+    distinct(race, candidate)
+  
   contested_races <- base_data |> 
+    anti_join(small_candidates) |> 
     distinct(race, candidate) |> 
-    collect() |> 
-    filter(n() > 1, .by = c(race)) |> 
-    distinct(race)
+    count(race) |> 
+    filter(n > 1) |> 
+    select(race)
   
   if (partisan_only){
     # What are the partisan races in the data?
     partisan_races <- base_data |> 
       distinct(race, party_detailed) |>
       filter(party_detailed != "NONPARTISAN") |> 
-      distinct(race) |> 
-      collect()
+      distinct(race)
     
     contested_races <- inner_join(contested_races, partisan_races)
   }
