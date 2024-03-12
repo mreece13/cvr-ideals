@@ -91,3 +91,72 @@ p1 <- draws |>
 p1 + p2
 
 ggsave("figs/compare.jpg", width = 16, height = 12, units = "in")
+
+
+data <- tar_read(data_partisan)
+
+contests <- read_csv("../cvrs/code/util/contests.csv") |> 
+  filter(state == "COLORADO")
+
+base_data <- open_dataset("../cvrs/data/pass1/",
+                          partitioning = c("state", "county_name"),
+                          schema = partial_schema,
+                          format = "parquet") |> 
+  filter(state == "COLORADO", magnitude == "1", !is.na(office), !is.na(district)) |> 
+  select(-magnitude) |> 
+  mutate(race = str_c(office, district, sep = " - "))
+
+contested_races <- base_data |> 
+  distinct(race, candidate) |> 
+  collect() |> 
+  filter(n() > 1, .by = c(race)) |> 
+  distinct(race)
+
+partisan_races <- base_data |> 
+  distinct(race, party_detailed) |>
+  filter(party_detailed != "NONPARTISAN") |> 
+  distinct(race) |> 
+  collect()
+
+contested_races <- inner_join(contested_races, partisan_races)
+
+randoms <- base_data |>
+  distinct(county_name, cvr_id) |>
+  collect() |> 
+  slice_sample(n=10000)
+
+base <- base_data |> 
+  inner_join(randoms, by = c("county_name", "cvr_id")) |>
+  inner_join(contested_races, by = c("race")) |> 
+  filter(!is.na(party_detailed)) |> 
+  mutate(choice_rep = as.numeric(party_detailed == "REPUBLICAN")) |> 
+  collect()
+
+form <- bf(
+  choice_rep ~ exp(loggamma) * alpha - beta,
+  nl = TRUE,
+  alpha ~ 0 + (1 | cvr_id),
+  beta ~ 1 + (1 | race),
+  loggamma ~ 0 + (1 | race),
+  family = brmsfamily("bernoulli", link = "logit")
+)
+
+priors <-
+  prior("normal(0, 2)", class = "b", nlpar = "beta") +
+  prior("normal(0, 1)", class = "b", nlpar = "loggamma") +
+  prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") +
+  prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
+  prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
+
+fit <- brm(
+  formula = form,
+  # prior = priors,
+  data = base,
+  chains = 4,
+  iter = 2000,
+  seed = 02139,
+  silent = 0,
+  # opencl = c(0, 0),
+  file = "fits/bernoulli_2pl_TEST",
+  file_refit = "on_change"
+)

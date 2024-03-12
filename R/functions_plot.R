@@ -96,6 +96,21 @@ plot_rhats <- function(ber_1pl, ber_2pl, cat_2pl_path){
   
   cat_2pl <- readRDS(cat_2pl_path)
   
+  d <- tibble(r = brms::rhat(ber_1pl), type = "Bernoulli 1-Parameter") |> 
+    bind_rows(
+      tibble(r = brms::rhat(ber_2pl), type = "Bernoulli 2-Parameter")
+    ) |> 
+    bind_rows(
+      tibble(r = summarise_draws(cat_2pl)$rhat, type = "Categorical 2-Parameter")
+    )
+  
+  datasummary(r * type ~ Mean + Median + Max + SD, data = d)
+  
+  d |> 
+    ggplot(aes(x = r, y = type)) +
+    geom_boxplot() +
+    theme_bw()
+  
   p_r1 <- tibble(r = brms::rhat(ber_1pl)) |> 
     ggplot(aes(x = r)) +
     geom_dots() +

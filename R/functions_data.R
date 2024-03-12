@@ -32,22 +32,23 @@ get_data <- function(path, st, partisan_only = FALSE, num = 1e9){
                               schema = partial_schema,
                               format = "parquet") |> 
       filter(state == st, magnitude == "1", !is.na(office), !is.na(district)) |> 
-      select(-magnitude)
+      select(-magnitude) |> 
+      mutate(race = str_c(office, district, sep = " - "))
   }
   
   # What are the contested races?
   contested_races <- base_data |> 
-    distinct(county_name, office, district, candidate) |> 
-    arrange(county_name, office, district) |> 
+    distinct(race, candidate) |> 
     collect() |> 
-    filter(n() > 1, .by = c(county_name, office, district)) |> 
-    distinct(county_name, office, district)
+    filter(n() > 1, .by = c(race)) |> 
+    distinct(race)
   
   if (partisan_only){
     # What are the partisan races in the data?
     partisan_races <- base_data |> 
+      distinct(race, party_detailed) |>
       filter(party_detailed != "NONPARTISAN") |> 
-      distinct(county_name, office, district) |> 
+      distinct(race) |> 
       collect()
     
     contested_races <- inner_join(contested_races, partisan_races)
@@ -64,10 +65,9 @@ get_data <- function(path, st, partisan_only = FALSE, num = 1e9){
   # for statewide races that need to be corrected
   base_data |> 
     inner_join(randoms, by = c("county_name", "cvr_id")) |>
-    inner_join(contested_races, by = c("county_name", "office", "district")) |> 
-    mutate(choice_dem = as.numeric(party_detailed == "DEMOCRAT"),
-           choice_rep = as.numeric(party_detailed == "REPUBLICAN")) |> 
-    mutate(race = str_c(office, district, sep = " - ")) |> 
+    inner_join(contested_races, by = c("race")) |> 
+    filter(!is.na(party_detailed)) |> 
+    mutate(choice_rep = as.numeric(party_detailed == "REPUBLICAN")) |> 
     collect()
 }
 

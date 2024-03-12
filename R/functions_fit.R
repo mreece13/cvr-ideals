@@ -19,28 +19,29 @@ fit_bernoulli <- function(data, type){
       choice_rep ~ exp(loggamma) * alpha - beta,
       nl = TRUE,
       alpha ~ 0 + (1 | cvr_id),
-      beta ~ 1 + (1 |i| race),
-      loggamma ~ 1 + (1 |i| race),
+      beta ~ 1 + (1 | race),
+      loggamma ~ 0 + (1 | race),
       family = brmsfamily("bernoulli", link = "logit")
     )
     
-    priors <-
-      prior("normal(0, 2)", class = "b", nlpar = "beta") +
-      prior("normal(0, 1)", class = "b", nlpar = "loggamma") +
-      prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") +
-      prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
-      prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
+    # priors <-
+    #   prior("normal(0, 2)", class = "b", nlpar = "beta") +
+    #   prior("normal(0, 1)", class = "b", nlpar = "loggamma") +
+    #   prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") +
+    #   prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
+    #   prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
   }
   
   brm(
     formula = form,
-    prior = priors,
+    # prior = priors,
     data = data,
     chains = 4,
     iter = 2000,
     seed = 02139,
     silent = 0,
-    file = str_c("fits/bernoulli_", type),
+    # opencl = c(0, 0),
+    file = str_c("fits/bernoulli_", type, "_TEST"),
     file_refit = "on_change"
   )
   

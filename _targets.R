@@ -34,8 +34,8 @@ list(
   tar_target(stan_data, get_stan_data(data)),
   tar_target(stan_data_adams, get_stan_data(data_adams)),
   # fit `brms` models
-  tar_target(fit_bin_2pl, fit_bernoulli(data_partisan, type = "2pl")),
   tar_target(fit_bin_1pl, fit_bernoulli(data_partisan, type = "1pl")),
+  tar_target(fit_bin_2pl, fit_bernoulli(data_partisan, type = "2pl")),
   # fit stan models
   tar_target(stan_2pl, "R/cat_2pl_streamlined.stan", format = "file"),
   tar_target(fit_cat2pl_adams, fit_stan(stan_2pl, stan_data_adams, "cat_2pl_streamlined")),
