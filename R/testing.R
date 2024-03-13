@@ -161,7 +161,7 @@ draws_old |>
     panel.grid.major.x = element_blank()
   )
 
-ggsave("figs/rsp_compare.jpg", width = 12, height = 8, units = "in")
+ggsave("figs/rsp_compare.jpg", width = 12, height = 12, units = "in")
 
 ####################
 

@@ -40,8 +40,9 @@ fit_bernoulli <- function(data, type){
     iter = 2000,
     seed = 02139,
     silent = 0,
-    # opencl = c(0, 0),
-    file = str_c("fits/bernoulli_", type, "_TEST"),
+    opencl = opencl(c(0, 0)),
+    backend = "cmdstanr",
+    file = str_c("fits/bernoulli_", type, "_GPU"),
     file_refit = "on_change"
   )
   
