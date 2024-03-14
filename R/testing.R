@@ -15,8 +15,24 @@ source("../medsl_theme.R")
 
 ###################################
 
+ber_1pl <- readRDS("fits/bernoulli_1pl_TEST.rds")
+ber_2pl <- readRDS("fits/bernoulli_2pl_TEST.rds")
+
 cat_2pl <- readRDS("fits/cat_2pl_streamlinednumV7448_full.rds") |> 
   spread_draws(gamma[id], beta[id])
+
+d <- tibble(r = brms::rhat(ber_1pl), type = "Bernoulli 1-Parameter") |> 
+  bind_rows(
+    tibble(r = brms::rhat(ber_2pl), type = "Bernoulli 2-Parameter")
+  ) |> 
+  bind_rows(
+    tibble(r = summarise_draws(cat_2pl)$rhat, type = "Categorical 2-Parameter")
+  )
+
+datasummary(r * type ~ Mean + Median + Max, data = d)
+
+
+######################
 
 var <- str_replace(colnames(cat_2pl), ".+\\[([0-9]+)\\]$", "\\1")
 var <- as.integer(var)
