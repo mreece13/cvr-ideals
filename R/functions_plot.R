@@ -1,24 +1,32 @@
 plot_ber_ideals <- function(ber_1pl, ber_2pl){
   
+  rand_1pl <- str_c("r_cvr_id[", 1:20, ",Intercept]")
+  rand_2pl <- str_c("r_cvr_id__alpha[", 1:20, ",Intercept]")
+  
   p1 <- ber_1pl |>
-    spread_draws(r_cvr_id[cvr_id, var]) |>
-    mutate(alpha = r_cvr_id/sd(r_cvr_id)) |>
-    filter(cvr_id < 20) |> 
-    ggplot(aes(x = alpha, y = as.character(cvr_id))) +
-    stat_halfeye() +
+    as_draws_df() |> 
+    select(any_of(rand_1pl), starts_with(".")) |> 
+    spread_draws(r_cvr_id[cvr_id,]) |>
+    ggplot(aes(x = r_cvr_id, y = as.factor(cvr_id))) +
+    stat_halfeye(normalize = "xy") +
     geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-    labs(x = expression(alpha), y = "Voter", title = "1PL Model")
+    labs(x = expression(alpha), y = "Voter", title = "1-Parameter")
   
   p2 <- ber_2pl |> 
-    spread_draws(r_cvr_id__alpha[cvr_id,]) |> 
-    mutate(alpha = r_cvr_id__alpha/sd(r_cvr_id__alpha)) |> 
-    filter(cvr_id < 20) |> 
-    ggplot(aes(x = alpha, y = as.character(cvr_id))) +
-    stat_halfeye() +
+    as_draws_df() |> 
+    select(any_of(rand_2pl), starts_with(".")) |> 
+    spread_draws(r_cvr_id__alpha[cvr_id,]) |>
+    ggplot(aes(x = r_cvr_id__alpha, y = as.factor(cvr_id))) +
+    stat_halfeye(normalize = "xy") +
     geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-    labs(x = expression(alpha), y = "", title = "2PL Model")
+    labs(x = expression(alpha), y = "", title = "2-Parameter")
   
-  ber_ideal <- p1 + p2 & theme_medsl()
+  ber_ideal <- p1 + p2 & 
+    theme_medsl() & 
+    theme(
+      panel.grid.major.x = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black")
+    )
   
   ggsave("figs/ber_ideals.jpg", plot = ber_ideal, width = 10, height = 6, units = "in")
   
@@ -41,14 +49,14 @@ plot_ber_params <- function(ber_2pl){
   
   random_races <- beta |> 
     distinct(race) |> 
-    slice_sample(n=12) |> 
-    bind_rows(tibble(race = c("US PRESIDENT - STATEWIDE", "US SENATE - STATEWIDE"))) |> 
+    slice_sample(n=25) |> 
+    bind_rows(tibble(race = c("US PRESIDENT - FEDERAL", "US SENATE - COLORADO"))) |> 
     distinct(race)
   
   # slopes
   gamma <- item_pars_2pl[, , "loggamma_Intercept"] |>
     exp() |> 
-    sweep(1, person_sds_2pl, "*") |>
+    sweep(1, person_sds_2pl, "/") |>
     as_tibble() |> 
     pivot_longer(cols = everything(), names_to = "race") |> 
     mutate(nlpar = "gamma") |> 
@@ -58,13 +66,20 @@ plot_ber_params <- function(ber_2pl){
     inner_join(random_races) |> 
     mutate(nlpar = factor(nlpar, labels = c("Difficulty", "Discrimination"))) |>
     ggplot(aes(x = value, y = race)) +
-    stat_pointinterval() +
+    stat_halfeye(geom = "pointinterval") +
     geom_vline(xintercept = 0, color = "blue", linetype = "dashed") +
     facet_wrap(~ nlpar, scales = "free_x") +
     labs(y = "", x = "") +
-    theme_medsl()
+    theme_medsl() +
+    theme(
+      panel.grid.major.x = element_blank(),
+      panel.border = element_rect(fill = NA, color = "black"),
+      panel.spacing.x = unit(15, units = "points"),
+      strip.text.x = element_text(margin = margin(b = "10")),
+      strip.clip = "off"
+    )
   
-  ggsave("figs/ber_params.jpg", plot = ber_params, width = 10, height = 6, units = "in")
+  ggsave("figs/ber_params.jpg", plot = ber_params, width = 10, height = 12, units = "in")
   
   return(ber_params)
   
