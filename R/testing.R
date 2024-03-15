@@ -18,8 +18,9 @@ source("../medsl_theme.R")
 ber_1pl <- readRDS("fits/bernoulli_1pl_TEST.rds")
 ber_2pl <- readRDS("fits/bernoulli_2pl_TEST.rds")
 
-cat_2pl <- readRDS("fits/cat_2pl_streamlinednumV7448_full.rds") |> 
-  spread_draws(gamma[id], beta[id])
+cat_2pl <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> 
+  as_draws_matrix() |> 
+  subset_draws(variable = "gamma")
 
 d <- tibble(r = brms::rhat(ber_1pl), type = "Bernoulli 1-Parameter") |> 
   bind_rows(
@@ -31,7 +32,6 @@ d <- tibble(r = brms::rhat(ber_1pl), type = "Bernoulli 1-Parameter") |>
 
 datasummary(r * type ~ Mean + Median + Max, data = d)
 
-
 ######################
 
 var <- str_replace(colnames(cat_2pl), ".+\\[([0-9]+)\\]$", "\\1")
@@ -40,7 +40,7 @@ dim <- rep(1, length(var))
 
 colnames(cat_2pl) <- str_c("LambdaV", var, "_", dim)
 
-sds <- readRDS("fits/cat_2pl_streamlinednumV7448_full.rds") |> 
+sds <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> 
   spread_draws(alpha[cvr_id]) |> 
   ungroup() |> 
   summarise(sd = sd(alpha), .by = ".draw") |> 
@@ -59,7 +59,7 @@ data <- tar_read(data_adams)
 
 ids <- data |> 
   filter(candidate != "undervote") |> 
-  distinct(race, candidate) |> 
+  distinct(race, candidate, party_detailed) |> 
   arrange(race, candidate) |> 
   group_by(race) |> 
   mutate(candidate_id = 1:n(),
@@ -67,52 +67,28 @@ ids <- data |>
   ungroup() |> 
   mutate(id = 1:n())
 
-draws <- as_draws_df(out$lambda_reordered_mcmc) |>
-  sweep(1, sds, "*") |> 
-  # mutate(across(everything(), ~ na_if(.x, 0))) |> 
-  select(-starts_with(".")) |> 
-  pivot_longer(cols = everything(), values_drop_na = TRUE) |> 
-  mutate(name = str_remove_all(name, "LambdaV|\\_1") |> as.numeric()) |> 
-  left_join(mutate(ungroup(ids), name = 1:n()), by = "name") |> 
-  select(-candidate_id, -race_id, -name) |> 
-  # separate_wider_delim(cols = name, delim = "V", names = c("parameter", "race_id")) |> 
-  # separate_wider_delim(cols = name, delim = "_", names = c("race_id", "candidate_id")) |> 
-  # mutate(candidate_id = str_remove(candidate_id, "]")) |> 
-  # mutate(race_id = as.numeric(race_id),
-  #        candidate_id = as.numeric(candidate_id)) |> 
-  # left_join(races) |> 
-  # left_join(candidates) |> 
-  mutate(candidate = str_squish(candidate)) |> 
-  mutate(candidate = case_match(
-    candidate,
-    "JOSEPH KISHORE NORISSA SANTA CRUZ" ~ "JOSEPH KISHORE",
-    "JORDAN CANCER SCOTT JENNIFER TEPOOL" ~ "JORDAN SCOTT",
-    "BILL HAMMONS ERIC BODENSTAB" ~ "BILL HAMMONS",
-    "MARK CHARLES ADRIAN WALLACE" ~ "MARK CHARLES",
-    "PRINCESS KHADIJAH MARYAM JACOB FAMBRO KHADIJAH MARYAM JACOB SR" ~ "PRINCESS KHADIJAH JACOB-FAMBRO",
-    "KYLE KENLEY KOPITKE NATHAN RE VO SORENSON" ~ "KYLE KENLEY",
-    "JOE MC HUGH ELIZABETH STORM" ~ "JOE MCHUGH",
-    "BLAKE HUBER FRANK ATWOOD" ~ "BLAKE HUBER",
-    "PHIL COLLINS BILLY JOE PARKER" ~ "PHIL COLLINS",
-    "GLORIA LA RIVA SUNIL FREEMAN" ~ "GLORIA LA RIVA",
-    .default = candidate
-  ))
-
-o <- draws |> 
-  filter(str_detect(race, "US PRESIDENT")) |> 
-  mutate(value = ifelse(candidate == "BILL HAMMONS", 0, value)) |> 
-  summarize(mean = abs(mean(value)), .by = candidate) |> 
-  arrange(mean) |> 
-  pull(candidate)
-
-p1 <- draws |> 
-  filter(str_detect(race, "US PRESIDENT")) |> 
-  mutate(value = ifelse(candidate == "BILL HAMMONS", 0, value)) |> 
-  ggplot(aes(x = value, y = order(candidate, o))) +
-  stat_halfeye(normalize = "xy") +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  labs(x = "", y = "", title = "Discrimination Parameter after RSP-Exact Algorithm") +
-  theme_bw()
+# draws <- as_draws_df(out$lambda_reordered_mcmc) |>
+#   sweep(1, sds, "*") |> 
+#   select(-starts_with(".")) |> 
+#   pivot_longer(cols = everything(), values_drop_na = TRUE) |> 
+#   mutate(name = str_remove_all(name, "LambdaV|\\_1") |> as.numeric()) |> 
+#   left_join(mutate(ungroup(ids), name = 1:n()), by = "name") |> 
+#   select(-candidate_id, -race_id, -name) |>  
+#   mutate(candidate = str_squish(candidate)) |> 
+#   mutate(candidate = case_match(
+#     candidate,
+#     "JOSEPH KISHORE NORISSA SANTA CRUZ" ~ "JOSEPH KISHORE",
+#     "JORDAN CANCER SCOTT JENNIFER TEPOOL" ~ "JORDAN SCOTT",
+#     "BILL HAMMONS ERIC BODENSTAB" ~ "BILL HAMMONS",
+#     "MARK CHARLES ADRIAN WALLACE" ~ "MARK CHARLES",
+#     "PRINCESS KHADIJAH MARYAM JACOB FAMBRO KHADIJAH MARYAM JACOB SR" ~ "PRINCESS KHADIJAH JACOB-FAMBRO",
+#     "KYLE KENLEY KOPITKE NATHAN RE VO SORENSON" ~ "KYLE KENLEY",
+#     "JOE MC HUGH ELIZABETH STORM" ~ "JOE MCHUGH",
+#     "BLAKE HUBER FRANK ATWOOD" ~ "BLAKE HUBER",
+#     "PHIL COLLINS BILLY JOE PARKER" ~ "PHIL COLLINS",
+#     "GLORIA LA RIVA SUNIL FREEMAN" ~ "GLORIA LA RIVA",
+#     .default = candidate
+#   ))
 
 rsp <- tibble(
   signs = out$sign_vectors[1],
@@ -120,24 +96,14 @@ rsp <- tibble(
   .draw = 1:length(out$permute_vectors)
 )
 
-draws_signed <- cat_2pl |> 
-  left_join(rsp, join_by(.draw)) |> 
-  mutate(gamma = gamma*signs*permute) |> 
-  left_join(ids, join_by(id)) |> 
-  ungroup() |> 
-  select(race, candidate, beta, gamma)
-
-draws_signed |> 
-  filter(str_detect(race, "US PRESIDENT")) |> 
-  pivot_longer()
-
 sds2 <- sds |> 
   as_tibble_col() |> 
   mutate(.draw = 1:n())
 
-draws_old <- cat_2pl |>
+draws_old <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> 
+  spread_draws(gamma[id], beta[id]) |> 
   left_join(sds2, join_by(.draw)) |> 
-  mutate(gamma = gamma*value) |> 
+  mutate(gamma = gamma/value) |> 
   select(-starts_with(".")) |> 
   left_join(ids, join_by(id)) |> 
   ungroup() |> 
@@ -156,6 +122,19 @@ draws_old <- cat_2pl |>
     "GLORIA LA RIVA SUNIL FREEMAN" ~ "GLORIA LA RIVA",
     .default = candidate
   ))
+
+signs <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> 
+  spread_draws(gamma[id]) |> 
+  summarize(sign = sign(mean(gamma)))
+
+draws_signed <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> 
+  spread_draws(gamma[id]) |> 
+  left_join(signs, join_by(id)) |>
+  left_join(sds2, join_by(".draw")) |> 
+  mutate(gamma = abs(gamma)*sign/value) |>
+  left_join(ids, join_by(id)) |> 
+  ungroup() |> 
+  select(race, candidate, party_detailed, gamma)
 
 draws_old |> 
   filter(str_detect(race, "US PRESIDENT")) |> 
@@ -179,78 +158,88 @@ draws_old |>
 
 ggsave("figs/rsp_compare.jpg", width = 12, height = 12, units = "in")
 
-####################
+base <- draws_signed |> 
+  filter(!(mean(gamma) == 0), .by = c(race, candidate)) |>
+  mutate(race_type = str_remove_all(race, " -.*?$|"),
+         race = str_remove(race, "- STATEWIDE - "),
+         race = str_remove(race, race_type),
+         race = str_remove_all(race, "^- |^ - "),
+         candidate = case_match(
+           candidate,
+           "JOSEPH KISHORE NORISSA SANTA CRUZ" ~ "JOSEPH KISHORE",
+           "JORDAN CANCER SCOTT JENNIFER TEPOOL" ~ "JORDAN SCOTT",
+           "BILL HAMMONS ERIC BODENSTAB" ~ "BILL HAMMONS",
+           "MARK CHARLES ADRIAN WALLACE" ~ "MARK CHARLES",
+           "PRINCESS KHADIJAH MARYAM JACOB FAMBRO KHADIJAH MARYAM JACOB SR" ~ "PRINCESS KHADIJAH JACOB-FAMBRO",
+           "KYLE KENLEY KOPITKE NATHAN RE VO SORENSON" ~ "KYLE KENLEY",
+           "JOE MC HUGH ELIZABETH STORM" ~ "JOE MCHUGH",
+           "BLAKE HUBER FRANK ATWOOD" ~ "BLAKE HUBER",
+           "PHIL COLLINS BILLY JOE PARKER" ~ "PHIL COLLINS",
+           "GLORIA LA RIVA SUNIL FREEMAN" ~ "GLORIA LA RIVA",
+           .default = candidate
+         )
+         )
 
-contests <- read_csv("../cvrs/code/util/contests.csv") |> 
-  filter(state == "COLORADO")
+base |> 
+  filter(party_detailed == "NONPARTISAN") |> 
+  # filter(race_type != "PROPOSITION") |> 
+  ggplot(aes(x = gamma, y = interaction(race, candidate, sep = " - "))) +
+  stat_halfeye(geom = "pointinterval") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  facet_grid(~ race_type, scales = "free_x", space = "free", labeller = labeller(race_type = label_wrap_gen(5))) +
+  # ggforce::facet_row(facets = vars(race_type), scales = "free_x", space = "free", labeller = labeller(groupwrap = label_wrap_gen(5))) +
+  labs(x = NULL, y = NULL, title = NULL) +
+  theme_medsl() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.border = element_rect(fill = NA, color = "black"),
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    panel.spacing.x = unit(15, units = "points"),
+    strip.text.x = element_text(margin = margin(b = "10")),
+    strip.clip = "off"
+  ) +
+  coord_flip() +
+  xlim(c(-2, 5))
 
-base_data <- open_dataset("../cvrs/data/pass1/",
-                          partitioning = c("state", "county_name"),
-                          schema = partial_schema,
-                          format = "parquet") |> 
-  filter(state == "COLORADO", magnitude == "1", !is.na(office), !is.na(district), candidate != "undervote") |> 
-  select(-magnitude) |> 
-  mutate(race = str_c(office, district, sep = " - "))
+ggsave("figs/nonpartisan_disc_slides.jpg", width = 12, height = 8, units = "in")
 
-small_candidates <- base_data |> 
-  count(race, candidate) |> 
-  filter(n <= 20) |> 
-  distinct(race, candidate)
-
-contested_races <- base_data |> 
-  anti_join(small_candidates) |> 
-  distinct(race, candidate) |> 
-  count(race) |> 
-  filter(n > 1) |> 
-  select(race)
-
-partisan_races <- base_data |> 
-  distinct(race, party_detailed) |>
+draws_signed |> 
   filter(party_detailed != "NONPARTISAN") |> 
-  distinct(race)
+  mutate(race_type = str_remove_all(race, " -.*?$|"),
+         race = str_remove(race, race_type),
+         race = str_remove_all(race, "- STATEWIDE - |FEDERAL|COLORADO"),
+         race = str_remove_all(race, "^- |^ - "),
+         y = str_c(race, candidate, sep = " - ") |> str_remove("^ -") |> as.factor()
+  ) |> 
+  ggplot(aes(x = gamma, y = y)) +
+  stat_halfeye(geom = "pointinterval") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  ggforce::facet_col(facets = vars(race_type), scales = "free", space = "free") +
+  labs(x = NULL, y = NULL, title = NULL) +
+  theme_medsl() +
+  theme(
+    panel.grid.major.x = element_blank()
+  )
 
-contested_races <- inner_join(contested_races, partisan_races)
+ggsave("figs/partisan_disc.jpg", width = 10, height = 16, units = "in")
 
-randoms <- base_data |>
-  distinct(county_name, cvr_id) |>
-  collect() |> 
-  slice_sample(n=1000)
+## 
 
-base <- base_data |> 
-  inner_join(randoms, by = c("county_name", "cvr_id")) |>
-  inner_join(contested_races, by = c("race")) |> 
-  filter(!is.na(party_detailed)) |> 
-  mutate(choice_rep = as.numeric(party_detailed == "REPUBLICAN")) |> 
-  collect()
+base |> 
+  mutate(partisan = ifelse(party_detailed == "NONPARTISAN", "NONPARTISAN", "PARTISAN")) |> 
+  # filter(party_detailed == "NONPARTISAN") |> 
+  ggplot(aes(x = abs(gamma), y = race_type)) +
+  stat_halfeye(geom = "pointinterval") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  ggforce::facet_row(~ partisan, scales = "free_x", space = "free") +
+  labs(x = NULL, y = NULL, title = NULL) +
+  theme_medsl() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.border = element_rect(fill = NA, color = "black"),
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    strip.text.x = element_text(margin = margin(b = "10"))
+  ) +
+  coord_flip()
 
-form <- bf(
-  choice_rep ~ exp(loggamma) * alpha - beta,
-  nl = TRUE,
-  alpha ~ 0 + (1 | cvr_id),
-  beta ~ 1 + (1 | race),
-  loggamma ~ 0 + (1 | race),
-  family = brmsfamily("bernoulli", link = "logit")
-)
-
-priors <-
-  prior("normal(0, 2)", class = "b", nlpar = "beta") +
-  prior("normal(0, 1)", class = "b", nlpar = "loggamma") +
-  prior("normal(0, 1)", class = "sd", group = "cvr_id", nlpar = "alpha") +
-  prior("normal(0, 3)", class = "sd", group = "race", nlpar = "beta") +
-  prior("normal(0, 1)", class = "sd", group = "race", nlpar = "loggamma")
-
-fit <- brm(
-  formula = form,
-  # prior = priors,
-  data = base,
-  chains = 4,
-  cores = 2,
-  iter = 2000,
-  seed = 02139,
-  silent = 0,
-  # opencl = c(0, 0),
-  file = "fits/bernoulli_2pl_TEST",
-  file_refit = "on_change"
-)
-
-
+ggsave("figs/disc_comparison.jpg", width = 12, height = 8, units = "in")

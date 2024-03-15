@@ -10,72 +10,51 @@ library(targets)
 
 source("../medsl_theme.R")
 
-# ber_1pl <- readRDS("fits/bernoulli_1pl.rds")
-# ber_2pl <- readRDS("fits/bernoulli_2pl.rds")
+ber_1pl <- readRDS("fits/bernoulli_1pl.rds")
+ber_2pl <- readRDS("fits/bernoulli_2pl.rds")
 
-signs <- readRDS("fits/cat_2pl.rds") |> 
-  as_draws_df() |>
-  select(matches("^gamma\\[")) |>
-  rowMeans() |>
-  sign()
-
-cat_2pl <- readRDS("fits/cat_2pl.rds") |> 
-  as_draws_df() |>
-  mutate(across(matches("(^alpha\\[)|(^gamma\\[)"), ~ signs * .))
+cat_2pl <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |>
+  as_draws_df() |> 
+  sweep(1, -1*out$sign_vectors, FUN = "*")
 
 ## categorical - ideals
 
+rand_cat <- str_c("alpha[", sample(1:10000, size = 20), "]")
+
+m <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> as_draws_df() |> select(contains("alpha")) |> as.matrix() |> mean()
+s <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> as_draws_df() |> select(contains("alpha")) |> as.matrix() |> sd()
+
 cat_ideals <- cat_2pl |> 
+  select(any_of(rand_cat), starts_with(".")) |>
   spread_draws(alpha[cvr_id]) |> 
-  ungroup() |> 
-  mutate(alpha = (alpha - mean(alpha))/sd(alpha)) |> 
-  filter(cvr_id < 15) |> 
-  ggplot(aes(x = alpha, y = as.character(cvr_id))) +
-  stat_halfeye() +
-  theme_bw() +
+  ggplot(aes(x = alpha, y = as.factor(cvr_id))) +
+  stat_halfeye(normalize = "xy") +
   geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
   labs(x = expression(alpha), y = "Voter") +
-  theme_medsl()
+  theme_medsl() +
+  theme(
+    panel.grid.major.x = element_blank(),
+  )
 
 ggsave("figs/cat_ideals.jpg", plot = cat_ideals, width = 10, height = 6, units = "in")
 
 ## categorical - aggregated
 
-data <- tar_read(data_base_adams) |> 
-  # propositions are not quite right
-  mutate(candidate = case_when(
-    str_detect(race, "PROPOSITION") ~ str_c(race, candidate, sep = " - "),
-    TRUE ~ candidate
-  ),
-  race = str_remove(race, ", "))
+data <- tar_read(data_adams)
 
 # Assign unique IDs to races and candidates
-races <- data |> 
-  distinct(race) |> 
-  arrange(race) |> 
-  mutate(race_id = row_number())
-
-candidates <- data |> 
+ids <- data |> 
+  filter(candidate != "undervote") |> 
   distinct(race, candidate) |> 
-  arrange(race, candidate) |>
-  select(candidate) |>
-  mutate(candidate_id = row_number())
+  arrange(race, candidate) |> 
+  group_by(race) |> 
+  mutate(candidate_id = 1:n(),
+         race_id = cur_group_id())
 
 # Join back to the original data
 df <- data |> 
-  left_join(races, by = "race") |> 
-  left_join(candidates, by = "candidate")
-
-# some races are not classified perfectly in districts rn so they would show up as list-columns (bad)
-bad_races <- df |> 
-  count(cvr_id, race_id) |> 
-  filter(n > 1) |> 
-  distinct(race_id) |> 
-  pull(race_id)
-
-df <- df |> 
-  filter(!(race_id %in% bad_races)) |>
-  drop_na(race_id, candidate_id)
+  filter(candidate != "undervote") |> 
+  left_join(ids, join_by(race, candidate))
 
 pres_choices <- df |>
   filter(office == "US PRESIDENT") |>
@@ -105,29 +84,38 @@ voters <- df |>
 joined <- cat_2pl |> 
   spread_draws(alpha[id]) |> 
   ungroup() |> 
-  mutate(alpha = alpha/sd(alpha)) |> 
   left_join(voters, join_by(id)) |> 
   drop_na(candidate) 
 
 cat_aggregated <- joined |> 
   filter(candidate %in% c("JOSEPH R BIDEN", "DONALD J TRUMP")) |> 
-  ggplot(aes(x = alpha, fill = candidate, y = candidate)) +
-  ggridges::geom_density_ridges(scale = 1) +
-  scale_fill_discrete(type = c("#F6573E", "#3791FF"), guide = "none") +
-  labs(x = expression(alpha), y = "", fill = "Candidate") +
-  theme_medsl()
+  ggplot(aes(x = alpha, fill = candidate)) +
+  stat_slab(color = "black", linewidth = 0.5, alpha = 0.8) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_fill_discrete(type = c("#F6573E", "#3791FF")) +
+  labs(x = expression(alpha), y = NULL, fill = "Candidate") +
+  theme_medsl() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    axis.text.y = element_blank(),
+    panel.grid.major.y = element_blank()
+  )
 
 cat_aggregated_others <- joined |> 
-  filter(!(candidate %in% c("JOSEPH R BIDEN", "DONALD J TRUMP"))) |> 
+  filter(!(candidate %in% c("JOSEPH R BIDEN", "DONALD J TRUMP"))) |>
   ggplot(aes(x = alpha, y = candidate)) +
-  ggridges::geom_density_ridges(fill = "#C0BA79", scale = 1) +
+  stat_slab(fill = "#C0BA79", color = "black", linewidth = 0.5) +
   theme_bw() +
   geom_vline(xintercept = 0, linetype = "dashed") +
   labs(x = expression(alpha), y = "") +
-  theme_medsl()
+  theme_medsl() +
+  theme(
+    panel.grid.major.x = element_blank()
+  ) +
+  xlim(c(-2, 2))
 
 ggsave("figs/cat_aggregated.jpg", plot = cat_aggregated, width = 10, height = 6, units = "in")
-ggsave("figs/cat_aggregated_others.jpg", plot = cat_aggregated_others, width = 10, height = 6, units = "in")
+ggsave("figs/cat_aggregated_others.jpg", plot = cat_aggregated_others, width = 6, height = 10, units = "in")
 
 ## categorical - params
 
@@ -229,3 +217,66 @@ p2 <- merged |>
   labs(x = expression(alpha), y = "")
 
 ggsave("figs/dime_comparison.jpeg", p2, width = 8, height = 12, units = "in")
+
+
+
+#######
+
+cat_2pl <- readRDS(cat_2pl_path)
+
+d <- tibble(r = brms::rhat(ber_1pl), type = "Bernoulli 1-Parameter") |> 
+  bind_rows(
+    tibble(r = brms::rhat(ber_2pl), type = "Bernoulli 2-Parameter")
+  ) |> 
+  bind_rows(
+    tibble(r = summarise_draws(cat_2pl)$rhat, type = "Categorical 2-Parameter")
+  )
+
+datasummary(r * type ~ Mean + Median + Max + SD, data = d)
+
+
+beta_sum <- beta |> 
+  summarise(mean_beta = mean(value), 
+            # median = median(value),
+            sd_beta = sd(value),
+            .by = race)
+
+
+gamma_sum <- gamma |> 
+  summarise(mean_gamma = mean(value), 
+            # median = median(value),
+            sd_gamma = sd(value),
+            .by = race)
+
+beta_sum |> left_join(gamma_sum) |> 
+  mutate(race = str_to_title(race),
+         race = str_replace(race, "^Us", "US")) |> 
+  gt() |> 
+  fmt_number(columns = -race) |> 
+  cols_label(
+    race = md("**Race**"),
+    mean_beta = md("**Mean β**"),
+    sd_beta = md("**SD β**"),
+    mean_gamma = md("**Mean γ**"),
+    sd_gamma = md("**SD γ**")
+  ) |> 
+  as_latex() |> 
+  as.character()
+
+gamma |> 
+  summarise(mean = mean(value), 
+            median = median(value),
+            sd = sd(value),
+            .by = race) |> 
+  mutate(race = str_to_title(race),
+         race = str_replace(race, "^Us", "US")) |>
+  gt() |> 
+  fmt_number(columns = -race) |> 
+  cols_label(
+    race = md("**Race**"),
+    mean = md("**Mean**"),
+    median = md("**Median**"),
+    sd = md("**SD**")
+  ) |> 
+  as_latex() |> 
+  as.character()
