@@ -1,11 +1,12 @@
 ---
-title: "Estimation of Ideal Points Using Cast Vote Records"
+title: "Hidden Partisanship Methods"
 date: today
 date-format: long
 embed-resources: true
 bibliography: references.bib
 suppress-bibliography: true
 author: "Mason Reece"
+institute: "MIT"
 cache: true
 echo: false
 format:
@@ -15,96 +16,16 @@ format:
     theme: ["medsl.scss"]
     slide-number: c
     css: medsl.css
-    footer: "Reece -- CVR Ideals"
+    # footer: "Reece -- CVR Ideals"
     fig-cap-location: top
     fig-responsive: true
     incremental: true
   beamer:
     theme: metropolis
-    include-in-header: metropolis_options_mit.tex
+    include-in-header: metropolis_options_medsl.tex
 ---
 
-## Cast Vote Records
-
-::: {layout="[10,8]"}
-![](figs/pres_ballot.jpg){fig-align="left" width="543"}
-
--   Anonymous records of what candidate each voter picked in each race on the ballot \pause
-
--   Modelling challenges
-
-    -   Categorical outcome with different options for each race
-
-    -   People vote in different races \pause
-
--   1.3B "bubbles" and 50m voters in 2020 election
-:::
-
-## Distribution of Cast Vote Records
-
-![](figs/cd_map.png)
-
-## Methodology - IRT Model
-
-```{=tex}
-\begin{align*}
-\onslide<1->{Y_{jk} & \sim \text{Bernoulli}(\pi_{jk}) &\text{ or } & \hfill Y_{j, k(c)} \sim \text{Categorical}(\pi_{j, k(c)}) \\}
-\onslide<2->{\pi &= logit^{-1} ( \nu_{jk} ) &\text{ or } & \hfill softmax( \nu_{j, k(c)}) \\}
-\onslide<3->{\nu &= \gamma_k \alpha_j - \beta_k &\text{ or } & \hfill \gamma_{k(c)} \alpha_j - \beta_{k(c)}}
-\end{align*}
-```
-| Quantity                       | Symbol           |
-|--------------------------------|------------------|
-| Individual                     | $j = 1, 2, …, J$ |
-| Race                           | $k = 1, 2, …, K$ |
-| Candidate                      | $c = 1, 2, …, C$ |
-| Ideal point of voter $j$       | $\alpha$         |
-| Discrimination/Slope Parameter | $\gamma$         |
-| Difficulty/Location Parameter  | $\beta$          |
-
-## Identification and Priors
-
--   The scale and location of $\alpha$ are unidentified (can add or multiply a constant with no change in likelihood) \pause
-
-    -   Set prior to $\mathcal{N}(0, 1)$ and post-process draws \pause
-
--   $\gamma$'s sign can also flip around with relation to the sign of $\alpha$. \pause
-
-    -   Constrain $\gamma > 0$ for Bernoulli models
-    -   Post-process draws for Categorical models \pause
-
--   Priors
-
-    -   Uninformative, standard priors for other parameters
-
-    -   Future work: Informative priors using party or NOMINATE/DIME scores to help with identification and speed convergence
-
-## Categorical Results - Ideal Points
-
-![](figs/cat_ideals.jpg)
-
-## Categorical Results -- Aggregated Ideal Points
-
-![](figs/cat_aggregated.jpg)
-
-## Introduction (Option 1)
-
-How representative is a government of its people?
-
-<div>
-
--   One approach (of many) compares the "ideological" positions of legislators and voters \pause
-    -   For legislators: roll-call votes [@poole_patterns_1991], campaign contributions [@bonica_mapping_2014; @bonica_inferring_2018], tweets [@barberá2015], etc. \pause
-    -   For voters: surveys [e.g., @bafumi_leapfrog_2010] and **cast vote records (CVRs)** [@lewis2001] \pause
-        -   I focus on CVRs because they have the most complete information and let us answer questions about down-ballot races
-
-</div>
-
-## Representation First Pass
-
-![](figs/dime_comparison%20copy.jpeg)
-
-## Introduction (Option 2)
+## Introduction
 
 Partisanship is embedded in who we are [@campbell_american_1960; @fiorina_retrospective_1981; @green_partisan_2002] and how political parties represent themselves [@aldrich_why_2011]
 
@@ -132,18 +53,73 @@ Two different ways to think about nonpartisan elections
 
 Research in this area tends to use surveys, aggregated observational data, or small n individual data
 
-## Hidden Partisanship First Pass
+## Cast Vote Records
 
-![](figs/cat_params.jpg){fig-align="center"}
+::: {layout="[10,8]"}
+![](figs/pres_ballot.jpg){fig-align="left" width="543"}
 
-## Future Work
+-   Anonymous records of what candidate each voter picked in each race on the ballot \pause
 
--   Hierarchical model to address the *representation* angle \pause
+-   1.3B "bubbles" and 50m voters in 2020 election
 
--   Scaling the models up for the full data set \pause
+-   Proof of concept using Adams County, Colorado
+:::
 
--   Extension to races where a voter could choose more than one candidate \pause
+## HPP Measurement - Delta Method
 
--   Multiple dimensions for *hidden partisanship* angle
+$\Delta_{c,j} = \lvert P(C_{i,c,j} = 1| D_i = 1) - P(C_{i,c,j} = 1| R_i = 1)\lvert$
 
-# Thank You!
+Take maximum $\Delta_{c,j}$ for the candidates in each race $j$
+
+| Quantity                                          | Symbol         |
+|---------------------------------------------------|----------------|
+| Voter                                             | $i$            |
+| Candidate                                         | $c$            |
+| Race                                              | $j$            |
+| Voter $i$ chose the Democrat/Republican candidate | $D_i$ or $R_i$ |
+| Voter $i$ chose candidate $c$ in race $j$         | $C_{i,c,j}$    |
+
+## HPP Results - Delta Method
+
+![](images/summary_delta_j_slides.png)
+
+## HPP Measurement - IRT Method
+
+```{=tex}
+\begin{align*}
+\onslide<1->{Y_{j, k(c)} &\sim \text{Categorical}(\pi_{j, k(c)}) \\}
+\onslide<2->{\pi_{j, k(c)} &= softmax( \nu_{j, k(c)}) \\}
+\onslide<3->{\nu_{j, k(c)} &= \gamma_{k(c)} \alpha_j - \beta_{k(c)}}
+\end{align*}
+```
+| Quantity                       | Symbol           |
+|--------------------------------|------------------|
+| Individual                     | $j = 1, 2, …, J$ |
+| Race                           | $k = 1, 2, …, K$ |
+| Candidate                      | $c = 1, 2, …, C$ |
+| Ideal point of voter $j$       | $\alpha$         |
+| Discrimination/Slope Parameter | $\gamma$         |
+| Difficulty/Location Parameter  | $\beta$          |
+
+## Identification
+
+-   Scale and location of $\alpha$ is unidentified \pause
+
+    -   Set prior to $\mathcal{N}(0, 1)$ and post-process draws \pause
+
+-   $\gamma$'s sign can also flip around with relation to the sign of $\alpha$. \pause
+
+    -   Post-process draws for Categorical models \pause
+    -   Normalize by standard deviation
+
+## HPP Results - IRT Method
+
+![](figs/disc_comparison.jpg)
+
+## HPP Results - IRT Method - Nonpartisan Details
+
+![](figs/nonpartisan_disc_slides.jpg)
+
+## HPP Results - Delta Method
+
+![](images/summary_delta_j_slides.png)
