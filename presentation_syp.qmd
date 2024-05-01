@@ -1,0 +1,100 @@
+---
+title: "Estimating Ideal Points Using Cast Vote Records"
+date: today
+date-format: long
+embed-resources: true
+bibliography: references.bib
+suppress-bibliography: true
+author: "Mason Reece"
+institute: "MIT"
+cache: true
+echo: false
+format:
+  revealjs:
+    smaller: true
+    progress: false
+    theme: ["medsl.scss"]
+    slide-number: c
+    css: medsl.css
+    fig-cap-location: top
+    fig-responsive: true
+    incremental: true
+  beamer:
+    theme: metropolis
+    include-in-header: metropolis_options_mit.tex
+---
+
+## Introduction
+
+Large body of research interested in ideological scaling of various political groups, using various sources of data, with various methodologies
+
+. . .
+
+-   I contribute new data (cast vote records), a slightly new methodology (categorical IRT), and focus on an understudied group (voters)
+
+. . .
+
+I also show two empirical applications
+
+1.  Representation (??)
+2.  Hidden partisanship in nonpartisan elections
+
+## Cast Vote Records
+
+::: {layout="[10,8]"}
+![](figs/pres_ballot.jpg){fig-align="left" width="543"}
+
+-   Anonymous records of what candidate each voter picked in each race on the ballot \pause
+
+-   1.3B "bubbles" and 40m voters in 2020 election
+
+-   Proof of concept using Adams County, Colorado
+:::
+
+## Item-Response Theory
+
+```{=tex}
+\begin{align*}
+\onslide<1->{Y_{j, k(c)} &\sim \text{Categorical}(\pi_{j, k(c)}) \\}
+\onslide<2->{\pi_{j, k(c)} &= softmax( \nu_{j, k(c)}) \\}
+\onslide<3->{\nu_{j, k(c)} &= \gamma_{k(c)} \alpha_j - \beta_{k(c)}}
+\end{align*}
+```
+| Quantity                       | Symbol           |
+|--------------------------------|------------------|
+| Individual                     | $j = 1, 2, …, J$ |
+| Race                           | $k = 1, 2, …, K$ |
+| Candidate                      | $c = 1, 2, …, C$ |
+| Ideal point of voter $j$       | $\alpha$         |
+| Discrimination/Slope Parameter | $\gamma$         |
+| Difficulty/Location Parameter  | $\beta$          |
+
+## Aggregated Ideal Points
+
+![](figs/map_state_house.jpg)
+
+## Hidden Partisanship
+
+Partisanship is embedded in who we are [@campbell_american_1960; @fiorina_retrospective_1981; @green_partisan_2002] and how political parties represent themselves [@aldrich_why_2011]
+
+-   This extends to the state and local level, both in politics [@hopkins_increasingly_2018] and policy [@hertel-fernandez_state_2019; @grumbach_laboratories_2022]
+
+    . . .
+
+-   Yet, 70% of local governments use *nonpartisan* elections [@desantis_contemporary_1991; @svara2003two]
+
+. . .
+
+Do voters still use partisanship in the absence of party labels?
+
+. . .
+
+Previous work tends to use survey, aggregated observational, or small *n* individual data
+
+## Hidden Partisanship Results
+
+![](figs/disc_slides.jpg)
+
+## Hidden Partisanship Results - Nonpartisan Details
+
+![](figs/nonpartisan_disc_slides2.jpg)
