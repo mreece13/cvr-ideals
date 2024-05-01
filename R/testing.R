@@ -33,6 +33,8 @@ d <- tibble(r = brms::rhat(ber_1pl), type = "Bernoulli 1-Parameter") |>
 datasummary(r * type ~ Mean + Median + Max, data = d)
 
 ######################
+# RSP
+######################
 
 var <- str_replace(colnames(cat_2pl), ".+\\[([0-9]+)\\]$", "\\1")
 var <- as.integer(var)
@@ -40,20 +42,22 @@ dim <- rep(1, length(var))
 
 colnames(cat_2pl) <- str_c("LambdaV", var, "_", dim)
 
+out <- rsp_exact(
+  lambda_mcmc = cat_2pl,
+  rotate = TRUE,
+  maxIter = 500,
+  verbose = FALSE
+)
+
+### END RSP
+
 sds <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> 
   spread_draws(alpha[cvr_id]) |> 
   ungroup() |> 
   summarise(sd = sd(alpha), .by = ".draw") |> 
   pull(sd)
 
-out <- rsp_exact(
-  lambda_mcmc = cat_2pl,
-  rotate = TRUE,
-  maxIter = 500,
-  # threshold = 1e-6,
-  # sa_loops = 10,
-  verbose = TRUE
-)
+
 
 data <- tar_read(data_adams)
 
@@ -176,6 +180,7 @@ base <- draws_signed |>
            "BLAKE HUBER FRANK ATWOOD" ~ "BLAKE HUBER",
            "PHIL COLLINS BILLY JOE PARKER" ~ "PHIL COLLINS",
            "GLORIA LA RIVA SUNIL FREEMAN" ~ "GLORIA LA RIVA",
+           "DARIO HUNTER DAWN NEPTUNE ADAMS" ~ "DARIO HUNTER",
            .default = candidate
          )
          )
@@ -183,63 +188,166 @@ base <- draws_signed |>
 base |> 
   filter(party_detailed == "NONPARTISAN") |> 
   # filter(race_type != "PROPOSITION") |> 
-  ggplot(aes(x = gamma, y = interaction(race, candidate, sep = " - "))) +
+  ggplot(aes(x = gamma, y = reorder(interaction(race, candidate, sep = " - "), as.numeric(as.factor(race_type))), color = race_type)) +
   stat_halfeye(geom = "pointinterval") +
   geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  facet_grid(~ race_type, scales = "free_x", space = "free", labeller = labeller(race_type = label_wrap_gen(5))) +
-  # ggforce::facet_row(facets = vars(race_type), scales = "free_x", space = "free", labeller = labeller(groupwrap = label_wrap_gen(5))) +
-  labs(x = NULL, y = NULL, title = NULL) +
+  ggforce::facet_col(~ race_type, scales = "free_y", space = "free") +
+  labs(x = NULL, y = NULL, title = NULL, color = "Contest") +
   theme_medsl() +
+  scale_color_medsl() +
   theme(
     panel.grid.major.x = element_blank(),
     panel.border = element_rect(fill = NA, color = "black"),
-    axis.text.x = element_text(angle = 90, hjust = 1),
+    # axis.text.x = element_text(angle = 90, hjust = 1),
     panel.spacing.x = unit(15, units = "points"),
     strip.text.x = element_text(margin = margin(b = "10")),
-    strip.clip = "off"
-  ) +
-  coord_flip() +
-  xlim(c(-2, 5))
+    strip.clip = "off",
+    legend.position = "right",
+    legend.direction = "vertical",
+    legend.box.background = element_rect(color = "black", linewidth = 0.2)
+  )
 
-ggsave("figs/nonpartisan_disc_slides.jpg", width = 12, height = 8, units = "in")
+ggsave("figs/nonpartisan_disc_slides2.jpg", width = 12, height = 8, units = "in")
 
-draws_signed |> 
-  filter(party_detailed != "NONPARTISAN") |> 
-  mutate(race_type = str_remove_all(race, " -.*?$|"),
-         race = str_remove(race, race_type),
-         race = str_remove_all(race, "- STATEWIDE - |FEDERAL|COLORADO"),
-         race = str_remove_all(race, "^- |^ - "),
-         y = str_c(race, candidate, sep = " - ") |> str_remove("^ -") |> as.factor()
-  ) |> 
-  ggplot(aes(x = gamma, y = y)) +
+base |> 
+  filter(party_detailed != "NONPARTISAN", race_type == "US PRESIDENT") |> 
+  ggplot(aes(x = gamma, y = candidate)) +
   stat_halfeye(geom = "pointinterval") +
   geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  ggforce::facet_col(facets = vars(race_type), scales = "free", space = "free") +
+  # ggforce::facet_col(facets = vars(race_type), scales = "free", space = "free") +
   labs(x = NULL, y = NULL, title = NULL) +
   theme_medsl() +
   theme(
     panel.grid.major.x = element_blank()
   )
 
-ggsave("figs/partisan_disc.jpg", width = 10, height = 16, units = "in")
+ggsave("figs/partisan_disc_pres.jpg", width = 10, height = 8, units = "in")
 
 ## 
 
 base |> 
+  # filter((race_type == "US PRESIDENT" & candidate == "DONALD J TRUMP") | (race_type == "US PRESIDENT" & candidate == "JOSEPH R BIDEN") | race_type != "US PRESIDENT" ) |> 
   mutate(partisan = ifelse(party_detailed == "NONPARTISAN", "NONPARTISAN", "PARTISAN")) |> 
-  # filter(party_detailed == "NONPARTISAN") |> 
-  ggplot(aes(x = abs(gamma), y = race_type)) +
+  ggplot(aes(x = abs(gamma), y = reorder(race_type, partisan == "NONPARTISAN"), color = partisan)) +
   stat_halfeye(geom = "pointinterval") +
   geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  ggforce::facet_row(~ partisan, scales = "free_x", space = "free") +
-  labs(x = NULL, y = NULL, title = NULL) +
+  ggforce::facet_col(~ partisan, scales = "free_y", space = "free") +
+  labs(x = NULL, y = NULL, title = NULL, color = "Election Type") +
   theme_medsl() +
+  scale_color_manual(values = c("#C0BA79", "#3791FF")) +
   theme(
     panel.grid.major.x = element_blank(),
     panel.border = element_rect(fill = NA, color = "black"),
-    axis.text.x = element_text(angle = 90, hjust = 1),
-    strip.text.x = element_text(margin = margin(b = "10"))
-  ) +
-  coord_flip()
+    # axis.text.x = element_text(angle = 90, hjust = 1),
+    strip.text.x = element_text(margin = margin(b = "10")),
+    legend.position = "right",
+    legend.direction = "vertical",
+    legend.box.background = element_rect(color = "black", linewidth = 0.2)
+  )
 
-ggsave("figs/disc_comparison.jpg", width = 12, height = 8, units = "in")
+ggsave("figs/disc_slides.jpg", width = 12, height = 8, units = "in")
+
+####
+
+ideals <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> 
+  as_draws_matrix() |> 
+  subset_draws("alpha")
+
+ideals <- ideals * out$sign_vectors[,1]
+
+choices <- data |> 
+  filter(candidate != "undervote") |> 
+  left_join(ids, join_by(race, candidate)) |> 
+  arrange(race_id, candidate_id) |> 
+  mutate(cvr_id = 1:n(), .by = cvr_id) |> 
+  distinct(cvr_id, office, district, candidate, party_detailed.x)
+
+results <- ideals |> 
+  spread_draws(alpha[cvr_id]) |> 
+  ungroup() |> 
+  left_join(choices, join_by(cvr_id)) |> 
+  drop_na(district) |> 
+  mutate(district = as.numeric(district))
+
+house_options <- house_results |> distinct(district) |> pull()
+
+house_summaries <- house_results |> 
+  summarise(ideal_mean = mean(alpha), .by = district)
+
+boundaries <- read_sf("data/co_sldl_2011_to_2021/co_sldl_2011_to_2021.shp") |> 
+  select(District_1) |> 
+  filter(District_1 %in% house_options) |> 
+  left_join(house_summaries, join_by("District_1" == "district")) 
+
+ggplot(boundaries, aes(fill = ideal_mean)) +
+  geom_sf() +
+  ggrepel::geom_label_repel(
+    data = head(boundaries),
+    aes(label = round(ideal_mean, 2), geometry = geometry),
+    stat = "sf_coordinates"
+  ) +
+  theme_medsl_map() +
+  scale_fill_gradient2(low = "#3791FF", mid = "white", high = "#F6573E", midpoint = 0, limits = c(-1, 1)) +
+  labs(fill = "Average Ideal Point", title = "Colorado State House Districts")
+
+ggsave("figs/map_state_house.jpg", width = 12, height = 8, units = "in")
+
+house_results |> 
+  ggplot(aes(x = alpha, y = district)) +
+  stat_slab() +
+  theme_bw()
+  scale_fill_gradient2(low = "#3791FF", mid = "white", high = "#F6573E", midpoint = 0, limits = c(-1, 1))
+
+###
+
+cat_2pl_full <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> 
+  as_draws_matrix() |> 
+  colMeans() |> 
+  as_tibble(rownames = "parameter") |> 
+  filter(!str_detect(parameter, "^lp"))
+
+cat_2pl_var <- readRDS("fits/cat_2pl_streamlinednumV7535_var.rds") |> 
+  as_draws_df() |> 
+  slice_head(n=1) |> 
+  select(-starts_with("lp_")) |> 
+  pivot_longer(cols = everything(), names_to = "parameter")
+
+comparison <- left_join(cat_2pl_full, cat_2pl_var, join_by(parameter))
+
+cor(comparison$value.x, comparison$value.y)
+
+range01 <- function(x){(x-min(x))/(max(x)-min(x))}
+
+comparison |> 
+  filter(parameter != "mu_beta") |> 
+  mutate(
+    type = case_when(
+      str_detect(parameter, "alpha") ~ "alpha",
+      str_detect(parameter, "beta") ~ "beta",
+      str_detect(parameter, "gamma") ~ "gamma"
+      ),
+    type = factor(type, labels = c("alpha", "beta", "gamma"))
+  ) |> 
+  mutate(
+    value.x = range01(value.x),
+    value.y = range01(value.y),
+    .by = type
+  ) |> 
+  ggplot(aes(x = value.x, y = value.y)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, color = "#F6573E", linetype = "dashed") +
+  geom_smooth(color = "#3791FF") +
+  facet_wrap(~ type, scales = "fixed", labeller = label_parsed) +
+  labs(x = "Full Parameters", y = "Pathfinder Parameters") +
+  theme_medsl() +
+  theme(
+    strip.text = element_text(family = "sans"),
+    panel.border = element_rect(fill = NA, color = "black"),
+    panel.grid.major = element_blank()
+  ) +
+  ylim(c(0, 1)) +
+  xlim(c(0, 1)) +
+  scale_x_continuous(labels = scales::label_number(accuracy = 0.1), breaks = c(0, 0.5, 1)) +
+  scale_y_continuous(labels = scales::label_number(accuracy = 0.1), breaks = c(0, 0.5, 1))
+
+ggsave("figs/var_compare.jpg", width = 10, height = 4, units = "in")
