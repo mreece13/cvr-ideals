@@ -1,10 +1,12 @@
 ---
-title: "Estimating Ideal Points Using Cast Vote Records"
+title: "The Democratic and the Republican Way to Clean the Street"
+subtitle: "Estimating Partisan Voting in Nonpartisan Offices Using Cast Vote Records"
 date: today
 date-format: long
 embed-resources: true
 bibliography: references.bib
-suppress-bibliography: true
+suppress-bibliography: false
+colorlinks: true
 author: "Mason Reece"
 institute: "MIT"
 cache: true
@@ -24,42 +26,70 @@ format:
     include-in-header: metropolis_options_mit.tex
 ---
 
-## Introduction
+## Motivation
 
-Large body of research interested in ideological scaling of various political groups, using various sources of data, with various methodologies
-
-. . .
-
--   I contribute new data (cast vote records), a slightly new methodology (categorical IRT), and focus on an understudied group (voters)
+Partisanship is embedded in who we are [@campbell_american_1960; @fiorina_retrospective_1981; @green_partisan_2002] and how political parties represent themselves [@aldrich_why_2011]
 
 . . .
 
-I also show two empirical applications
+-   This extends to the state and local level, both in politics [@hopkins_increasingly_2018] and policy [@hertel-fernandez_state_2019; @grumbach_laboratories_2022]
 
-1.  Representation (??)
-2.  Hidden partisanship in nonpartisan elections
+. . .
 
-## Cast Vote Records
+Yet, across the U.S., 70% of local governments use *nonpartisan* election systems where party labels are absent from the ballot [@desantis_contemporary_1991; @svara2003two]
 
-::: {layout="[10,8]"}
-![](figs/pres_ballot.jpg){fig-align="left" width="543"}
+. . .
 
--   Anonymous records of what candidate each voter picked in each race on the ballot \pause
+::: {.callout-note icon="false"}
+## Question
 
--   1.3B "bubbles" and 40m voters in 2020 election
-
--   Proof of concept using Adams County, Colorado
+*Do patterns in vote choice also fall along a partisan divide in the absence of party labels on the ballot?*
 :::
 
-## Item-Response Theory
+## Conflicting Expectations
 
-```{=tex}
+::: incremental
+1.  Progressive reformers around the turn of the 20^th^ century called for changes to insulate government from the pressure of parties and political machines [@bonneau_defense_2009; @adrian_general_1952]
+    -   Local governments often perform non-ideological work, like paving roads and fixing sewers [@peterson_city_1981; @oliver2012local; @anzia_party_2021]
+
+    -   Voter preferences on local issues don't seem to mirror preferences on national issues [@anzia_party_2021]
+2.  Voters regularly rely on "heuristics," especially in low-information elections [@downs_economic_1957; @mondak_public_1993; @lau_advantages_2001]
+    -   Indeed, research suggests a correlation between local public opinion, elite preferences, and policy outcomes [@tausanovitch_measuring_2013; @einstein_pushing_2016; @de_benedictis-kessner_mayoral_2016; @einstein_mayors_2018; @de_benedictis-kessner_how_2023; @sievert_nationalization_2019; @weinschenk_nationalization_2022; @kuriwaki_ticket_2023]
+:::
+
+## Data
+
+One of the reasons there are conflicting expectations is that measurement of local preferences is extremely difficult [@anzia_party_2021]
+
+-   Survey research is limited by sample size, question wording, survey complexity, and inaccurate reporting
+
+-   Aggregated data must rely on strong ecological inference assumptions
+
+. . .
+
+I take a new approach to this problem, using ballot-level data called cast vote records (CVRs)
+
+-   CVRs contain the true votes on all races a voter could have cast a ballot for in the election, but they only contain information on vote choice
+
+. . .
+
+-   I use CVRs from Adams County, Colorado
+
+## Model Estimation
+
+Standard 2-Parameter Item-Response Theory model [@jackman2009]
+
+::: {.callout-note icon="false"}
+## Model
+
+$$
 \begin{align*}
-\onslide<1->{Y_{j, k(c)} &\sim \text{Categorical}(\pi_{j, k(c)}) \\}
-\onslide<2->{\pi_{j, k(c)} &= softmax( \nu_{j, k(c)}) \\}
-\onslide<3->{\nu_{j, k(c)} &= \gamma_{k(c)} \alpha_j - \beta_{k(c)}}
+Y_{j, k(c)} &\sim \text{Categorical}(\pi_{j, k(c)}) \\
+\pi_{j, k(c)} &= \text{Pr}(y_{jk} = c | \alpha_j, \gamma_{k(c)}, \beta_{k(c)}) = \text{softmax}(\alpha_j \cdot \gamma_{k(c)} - \beta_{k(c)})
 \end{align*}
-```
+$$
+:::
+
 | Quantity                       | Symbol           |
 |--------------------------------|------------------|
 | Individual                     | $j = 1, 2, …, J$ |
@@ -69,32 +99,74 @@ I also show two empirical applications
 | Discrimination/Slope Parameter | $\gamma$         |
 | Difficulty/Location Parameter  | $\beta$          |
 
-## Aggregated Ideal Points
+## Model Notes
 
-![](figs/map_state_house.jpg)
+Identification restrictions are essential [@jackman2009, @clinton2004, @rivers2003]
 
-## Hidden Partisanship
+-   Normalize $\alpha$ to mean 0, standard deviation 1
 
-Partisanship is embedded in who we are [@campbell_american_1960; @fiorina_retrospective_1981; @green_partisan_2002] and how political parties represent themselves [@aldrich_why_2011]
-
--   This extends to the state and local level, both in politics [@hopkins_increasingly_2018] and policy [@hertel-fernandez_state_2019; @grumbach_laboratories_2022]
-
-    . . .
-
--   Yet, 70% of local governments use *nonpartisan* elections [@desantis_contemporary_1991; @svara2003two]
+-   Let $\gamma$ vacillate and post-process using the algorithm developed by @papastamoulis2022
 
 . . .
 
-Do voters still use partisanship in the absence of party labels?
+I estimate the model under a Bayesian framework using a bespoke Stan model
+
+## Validation – Aggregated Points
+
+![Distribution of Ideal Points of Voters for Trump and Biden Voters](images/cat_aggregated.jpg)
+
+## Validation – Geographical Distribution
+
+![Distribution of Ideal Points by State House District in Adams County, Colorado](figs/map_state_house.jpg)
+
+## Validation – DIME Comparison
+
+Different latent dimensions prevent me from directly comparing estimates, instead I can only compare *cutpoints*
 
 . . .
 
-Previous work tends to use survey, aggregated observational, or small *n* individual data
+The definition of cutpoints flows from the spatial utility model for a binary choice between $\zeta_j$ and $\psi_j$
 
-## Hidden Partisanship Results
+$$
+\begin{align*}
+U_i\left(\zeta_j\right) &= -\left\|\xi_i-\zeta_j\right\|^2+\eta_{i j} \\
+U_i\left(\psi_j \right) &=- \left\|\xi_i-\psi_j \right\|^2+v_{i j}
+\end{align*}
+$$
+
+where $\xi_i \in \mathbb{R}^d$ is the ideal point of respondent $i$ and $\eta_{i j}$ and $v_{i j}$ are stochastic shocks
+
+. . .
+
+The cutpoint is then defined as $\frac{(\xi_j + \psi_j)}{2}$ , the point at which a respondent would find themselves indifferent between the two candidates
+
+. . .
+
+In the categorical model, I compute a series of pairwise comparisons between candidates
+
+## Validation – DIME Comparison
+
+![Comparison of the Cutpoints from the Categorical 2-Parameter Model and DIME Scores](images/dime_comparison.jpeg)
+
+## Results
 
 ![](figs/disc_slides.jpg)
 
-## Hidden Partisanship Results - Nonpartisan Details
+## Results - Nonpartisan Details
 
 ![](figs/nonpartisan_disc_slides2.jpg)
+
+## Future Work
+
+::: incremental
+-   Sample more voters from more geographies, which is currently limited by computational cost
+    -   Variational inference via *Pathfinder* is one option
+    -   Machine learning prediction, akin to @bonica_inferring_2018, is another option
+-   Model extensions
+    -   Some evidence suggests that local elections are not well-described by a single dimension [@bucchianeri_party_2020]
+    -   Include contests where voters could choose more than one candidate
+-   Compare method directly with @lewis2001 and @reece2024
+-   More than just partisanship [@anzia_party_2021]
+:::
+
+## References {.scrollable}
