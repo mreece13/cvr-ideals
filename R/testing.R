@@ -351,3 +351,7 @@ comparison |>
   scale_y_continuous(labels = scales::label_number(accuracy = 0.1), breaks = c(0, 0.5, 1))
 
 ggsave("figs/var_compare.jpg", width = 10, height = 4, units = "in")
+
+d = tar_read(stan_data_adams)
+
+d$votes

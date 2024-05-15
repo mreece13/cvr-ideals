@@ -85,8 +85,8 @@ get_stan_data <- function(data){
   # Assign unique IDs to races and candidates
   ids <- data |> 
     filter(candidate != "undervote") |> 
-    distinct(race, candidate) |> 
-    arrange(race, candidate) |> 
+    count(race, candidate) |> 
+    arrange(race, desc(n)) |> 
     group_by(race) |> 
     mutate(candidate_id = 1:n(),
            race_id = cur_group_id())
@@ -98,8 +98,9 @@ get_stan_data <- function(data){
   
   # Create the votes matrix
   votes_matrix <- df |> 
-    select(county_name, cvr_id, race_id, candidate_id) |> 
-    arrange(race_id, candidate_id) |>
+    select(county_name, cvr_id, race_id, candidate_id, n) |> 
+    arrange(race_id, desc(n)) |>
+    select(-n) |> 
     pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |> 
     select(-cvr_id, -county_name) |> 
     as.matrix()
