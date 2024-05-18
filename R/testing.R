@@ -15,95 +15,6 @@ source("../medsl_theme.R")
 
 ###################################
 
-ber_1pl <- readRDS("fits/bernoulli_1pl_TEST.rds")
-ber_2pl <- readRDS("fits/bernoulli_2pl_TEST.rds")
-
-cat_2pl <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> 
-  as_draws_matrix() |> 
-  subset_draws(variable = "gamma")
-
-d <- tibble(r = brms::rhat(ber_1pl), type = "Bernoulli 1-Parameter") |> 
-  bind_rows(
-    tibble(r = brms::rhat(ber_2pl), type = "Bernoulli 2-Parameter")
-  ) |> 
-  bind_rows(
-    tibble(r = summarise_draws(cat_2pl)$rhat, type = "Categorical 2-Parameter")
-  )
-
-datasummary(r * type ~ Mean + Median + Max, data = d)
-
-######################
-# RSP
-######################
-
-var <- str_replace(colnames(cat_2pl), ".+\\[([0-9]+)\\]$", "\\1")
-var <- as.integer(var)
-dim <- rep(1, length(var))
-
-colnames(cat_2pl) <- str_c("LambdaV", var, "_", dim)
-
-out <- rsp_exact(
-  lambda_mcmc = cat_2pl,
-  rotate = TRUE,
-  maxIter = 500,
-  verbose = FALSE
-)
-
-### END RSP
-
-sds <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> 
-  spread_draws(alpha[cvr_id]) |> 
-  ungroup() |> 
-  summarise(sd = sd(alpha), .by = ".draw") |> 
-  pull(sd)
-
-
-
-data <- tar_read(data_adams)
-
-ids <- data |> 
-  filter(candidate != "undervote") |> 
-  distinct(race, candidate, party_detailed) |> 
-  arrange(race, candidate) |> 
-  group_by(race) |> 
-  mutate(candidate_id = 1:n(),
-         race_id = cur_group_id()) |> 
-  ungroup() |> 
-  mutate(id = 1:n())
-
-# draws <- as_draws_df(out$lambda_reordered_mcmc) |>
-#   sweep(1, sds, "*") |> 
-#   select(-starts_with(".")) |> 
-#   pivot_longer(cols = everything(), values_drop_na = TRUE) |> 
-#   mutate(name = str_remove_all(name, "LambdaV|\\_1") |> as.numeric()) |> 
-#   left_join(mutate(ungroup(ids), name = 1:n()), by = "name") |> 
-#   select(-candidate_id, -race_id, -name) |>  
-#   mutate(candidate = str_squish(candidate)) |> 
-#   mutate(candidate = case_match(
-#     candidate,
-#     "JOSEPH KISHORE NORISSA SANTA CRUZ" ~ "JOSEPH KISHORE",
-#     "JORDAN CANCER SCOTT JENNIFER TEPOOL" ~ "JORDAN SCOTT",
-#     "BILL HAMMONS ERIC BODENSTAB" ~ "BILL HAMMONS",
-#     "MARK CHARLES ADRIAN WALLACE" ~ "MARK CHARLES",
-#     "PRINCESS KHADIJAH MARYAM JACOB FAMBRO KHADIJAH MARYAM JACOB SR" ~ "PRINCESS KHADIJAH JACOB-FAMBRO",
-#     "KYLE KENLEY KOPITKE NATHAN RE VO SORENSON" ~ "KYLE KENLEY",
-#     "JOE MC HUGH ELIZABETH STORM" ~ "JOE MCHUGH",
-#     "BLAKE HUBER FRANK ATWOOD" ~ "BLAKE HUBER",
-#     "PHIL COLLINS BILLY JOE PARKER" ~ "PHIL COLLINS",
-#     "GLORIA LA RIVA SUNIL FREEMAN" ~ "GLORIA LA RIVA",
-#     .default = candidate
-#   ))
-
-rsp <- tibble(
-  signs = out$sign_vectors[1],
-  permute = out$permute_vectors[1],
-  .draw = 1:length(out$permute_vectors)
-)
-
-sds2 <- sds |> 
-  as_tibble_col() |> 
-  mutate(.draw = 1:n())
-
 draws_old <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> 
   spread_draws(gamma[id], beta[id]) |> 
   left_join(sds2, join_by(.draw)) |> 
@@ -127,17 +38,10 @@ draws_old <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |>
     .default = candidate
   ))
 
-signs <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> 
+draws_signed <- cat_2pl |> 
   spread_draws(gamma[id]) |> 
-  summarize(sign = sign(mean(gamma)))
-
-draws_signed <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> 
-  spread_draws(gamma[id]) |> 
-  left_join(signs, join_by(id)) |>
-  left_join(sds2, join_by(".draw")) |> 
-  mutate(gamma = abs(gamma)*sign/value) |>
-  left_join(ids, join_by(id)) |> 
   ungroup() |> 
+  left_join(mutate(ids, id = 1:n()), join_by(id)) |> 
   select(race, candidate, party_detailed, gamma)
 
 draws_old |> 
@@ -163,9 +67,7 @@ draws_old |>
 ggsave("figs/rsp_compare.jpg", width = 12, height = 12, units = "in")
 
 base <- draws_signed |> 
-  filter(!(mean(gamma) == 0), .by = c(race, candidate)) |>
   mutate(race_type = str_remove_all(race, " -.*?$|"),
-         race = str_remove(race, "- STATEWIDE - "),
          race = str_remove(race, race_type),
          race = str_remove_all(race, "^- |^ - "),
          candidate = case_match(
@@ -186,15 +88,15 @@ base <- draws_signed |>
          )
 
 base |> 
+  filter(!(mean(gamma) == 0), .by = c(race, candidate)) |>
   filter(party_detailed == "NONPARTISAN") |> 
-  # filter(race_type != "PROPOSITION") |> 
-  ggplot(aes(x = gamma, y = reorder(interaction(race, candidate, sep = " - "), as.numeric(as.factor(race_type))), color = race_type)) +
+  ggplot(aes(x = gamma, y = reorder(interaction(race, candidate, sep = " - "), as.numeric(as.factor(race_type))))) +
   stat_halfeye(geom = "pointinterval") +
   geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
   ggforce::facet_col(~ race_type, scales = "free_y", space = "free") +
   labs(x = NULL, y = NULL, title = NULL, color = "Contest") +
   theme_medsl() +
-  scale_color_medsl() +
+  # scale_color_medsl() +
   theme(
     panel.grid.major.x = element_blank(),
     panel.border = element_rect(fill = NA, color = "black"),
@@ -207,10 +109,38 @@ base |>
     legend.box.background = element_rect(color = "black", linewidth = 0.2)
   )
 
-ggsave("figs/nonpartisan_disc_slides2.jpg", width = 12, height = 8, units = "in")
+ggsave("figs/nonpartisan_disc.jpg", width = 8, height = 12, units = "in")
+
+base |> 
+  # filter(!(mean(gamma) == 0), .by = c(race, candidate)) |>
+  filter(party_detailed != "NONPARTISAN") |> 
+  ggplot(aes(x = gamma, y = reorder(interaction(race, candidate, sep = " - "), as.numeric(as.factor(race))))) +
+  stat_halfeye(geom = "pointinterval") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+  ggforce::facet_col(~ race_type, scales = "free_y", space = "free") +
+  labs(x = NULL, y = NULL, title = NULL, color = "Contest") +
+  theme_medsl() +
+  # scale_color_medsl() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.border = element_rect(fill = NA, color = "black"),
+    # axis.text.x = element_text(angle = 90, hjust = 1),
+    panel.spacing.x = unit(15, units = "points"),
+    strip.text.x = element_text(margin = margin(b = "10")),
+    strip.clip = "off",
+    legend.position = "right",
+    legend.direction = "vertical",
+    legend.box.background = element_rect(color = "black", linewidth = 0.2)
+  )
+
+ggsave("figs/partisan_disc2.jpg", width = 8, height = 14, units = "in")
 
 base |> 
   filter(party_detailed != "NONPARTISAN", race_type == "US PRESIDENT") |> 
+  bind_rows(
+    tibble(candidate = "JOSEPH R BIDEN", gamma = 0)
+  ) |> 
+  mutate(candidate = as.factor(candidate) |> fct_relevel("JOSEPH R BIDEN")) |> 
   ggplot(aes(x = gamma, y = candidate)) +
   stat_halfeye(geom = "pointinterval") +
   geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
@@ -226,7 +156,6 @@ ggsave("figs/partisan_disc_pres.jpg", width = 10, height = 8, units = "in")
 ## 
 
 base |> 
-  # filter((race_type == "US PRESIDENT" & candidate == "DONALD J TRUMP") | (race_type == "US PRESIDENT" & candidate == "JOSEPH R BIDEN") | race_type != "US PRESIDENT" ) |> 
   mutate(partisan = ifelse(party_detailed == "NONPARTISAN", "NONPARTISAN", "PARTISAN")) |> 
   ggplot(aes(x = abs(gamma), y = reorder(race_type, partisan == "NONPARTISAN"), color = partisan)) +
   stat_halfeye(geom = "pointinterval") +
@@ -300,16 +229,15 @@ house_results |>
 
 ###
 
-cat_2pl_full <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> 
-  as_draws_matrix() |> 
+cat_2pl_full <- cat_2pl |> 
   colMeans() |> 
   as_tibble(rownames = "parameter") |> 
-  filter(!str_detect(parameter, "^lp"))
+  filter(!str_detect(parameter, "^lp|raw|\\."))
 
-cat_2pl_var <- readRDS("fits/cat_2pl_streamlinednumV7535_var.rds") |> 
+cat_2pl_var <- readRDS("fits/cat_2pl_streamlined_numV7535_var.rds") |> 
   as_draws_df() |> 
   slice_head(n=1) |> 
-  select(-starts_with("lp_")) |> 
+  select(-starts_with("lp_"), -contains("raw"), -contains(".")) |> 
   pivot_longer(cols = everything(), names_to = "parameter")
 
 comparison <- left_join(cat_2pl_full, cat_2pl_var, join_by(parameter))
@@ -351,7 +279,3 @@ comparison |>
   scale_y_continuous(labels = scales::label_number(accuracy = 0.1), breaks = c(0, 0.5, 1))
 
 ggsave("figs/var_compare.jpg", width = 10, height = 4, units = "in")
-
-d = tar_read(stan_data_adams)
-
-d$votes

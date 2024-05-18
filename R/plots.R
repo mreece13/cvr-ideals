@@ -7,23 +7,56 @@ library(brms)
 library(tidybayes)
 library(bayesplot)
 library(targets)
-library(modelsummary)
+library(posterior)
+library(factor.switching)
 
 source("../medsl_theme.R")
 
 ber_1pl <- readRDS("fits/bernoulli_1pl.rds")
 ber_2pl <- readRDS("fits/bernoulli_2pl.rds")
 
-cat_2pl <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |>
-  as_draws_df() |> 
-  sweep(1, -1*out$sign_vectors, FUN = "*")
+## Categorical 2PL
+
+cat_2pl_gammas <- readRDS("fits/cat_2pl_streamlined_numV7535_full.rds") |> 
+  as_draws_matrix() |> 
+  subset_draws(variable = "gamma")
+
+var <- str_replace(colnames(cat_2pl_gammas), ".+\\[([0-9]+)\\]$", "\\1")
+var <- as.integer(var)
+dim <- rep(1, length(var))
+
+colnames(cat_2pl_gammas) <- str_c("LambdaV", var, "_", dim)
+
+out <- rsp_exact(
+  lambda_mcmc = cat_2pl_gammas,
+  rotate = TRUE,
+  maxIter = 500,
+  verbose = FALSE
+)
+
+cat_2pl <- readRDS("fits/cat_2pl_streamlined_numV7535_full.rds") |>
+  as_draws_df() |>
+  sweep(1, out$sign_vectors, FUN = "*")
+
+summaries = cat_2pl |> 
+  select(starts_with("alpha")) |> 
+  as_tibble() |> 
+  pivot_longer(cols = everything()) |> 
+  separate_wider_delim(cols = name, delim = "[", names = c("term", "id")) |> 
+  mutate(id = str_remove(id, "]") |> as.numeric()) |> 
+  summarize(
+    mean = mean(value),
+    precision = 1/var(value),
+    .by = id
+  )
+
+rm(cat_2pl_gammas, out, var, dim)
 
 ### RHAT TABLE
-d <- tibble(r = brms::rhat(ber_1pl), type = "Bernoulli 1-Parameter") |> 
+d <- 
   bind_rows(
-    tibble(r = brms::rhat(ber_2pl), type = "Bernoulli 2-Parameter")
-  ) |> 
-  bind_rows(
+    tibble(r = brms::rhat(ber_1pl), type = "Bernoulli 1-Parameter"),
+    tibble(r = brms::rhat(ber_2pl), type = "Bernoulli 2-Parameter"),
     tibble(r = summarise_draws(cat_2pl)$rhat, type = "Categorical 2-Parameter")
   )
 
@@ -37,9 +70,10 @@ d |>
 
 rand_cat <- str_c("alpha[", sample(1:10000, size = 20), "]")
 
-m <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> as_draws_df() |> select(contains("alpha")) |> as.matrix() |> mean()
-s <- readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> as_draws_df() |> select(contains("alpha")) |> as.matrix() |> sd()
-
+# check normality of \alpha
+readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> as_draws_df() |> select(contains("alpha")) |> as.matrix() |> mean()
+readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> as_draws_df() |> select(contains("alpha")) |> as.matrix() |> sd()
+  
 cat_ideals <- cat_2pl |> 
   select(any_of(rand_cat), starts_with(".")) |>
   spread_draws(alpha[cvr_id]) |> 
@@ -61,11 +95,13 @@ data <- tar_read(data_adams)
 # Assign unique IDs to races and candidates
 ids <- data |> 
   filter(candidate != "undervote") |> 
-  distinct(race, candidate) |> 
-  arrange(race, candidate) |> 
-  group_by(race) |> 
-  mutate(candidate_id = 1:n(),
-         race_id = cur_group_id())
+  count(race, candidate, party_detailed) |> 
+  arrange(race, desc(n)) |> 
+  mutate(
+    candidate_id = 1:n(),
+    race_id = cur_group_id(),
+    .by = race
+  )
 
 # Join back to the original data
 df <- data |> 
@@ -91,22 +127,24 @@ pres_choices <- df |>
   ))
 
 voters <- df |> 
-  select(cvr_id, race_id, candidate_id) |> 
-  arrange(race_id, candidate_id) |> 
+  select(cvr_id, race_id, n) |> 
+  arrange(race_id, desc(n)) |> 
   distinct(cvr_id) |> 
   mutate(id = row_number()) |> 
   left_join(pres_choices)
 
-joined <- cat_2pl |> 
-  spread_draws(alpha[id]) |> 
-  ungroup() |> 
+joined = summaries |> 
   left_join(voters, join_by(id)) |> 
-  drop_na(candidate) 
+  drop_na(candidate)
+
+unknown_cands = filter(joined, n() <= 2, .by = candidate) |> 
+  distinct(candidate) |> 
+  pull(candidate)
 
 cat_aggregated <- joined |> 
   filter(candidate %in% c("JOSEPH R BIDEN", "DONALD J TRUMP")) |> 
-  ggplot(aes(x = alpha, fill = candidate)) +
-  stat_slab(color = "black", linewidth = 0.5, alpha = 0.8) +
+  ggplot(aes(x = mean, fill = candidate, weight = precision)) +
+  geom_density(color = "black", linewidth = 0.5, alpha = 0.8) +
   geom_vline(xintercept = 0, linetype = "dashed") +
   scale_fill_discrete(type = c("#F6573E", "#3791FF")) +
   labs(x = expression(alpha), y = NULL, fill = "Candidate") +
@@ -117,21 +155,30 @@ cat_aggregated <- joined |>
     panel.grid.major.y = element_blank()
   )
 
-cat_aggregated_others <- joined |> 
+cat_aggregated_others = joined |> 
   filter(!(candidate %in% c("JOSEPH R BIDEN", "DONALD J TRUMP"))) |>
-  ggplot(aes(x = alpha, y = candidate)) +
-  stat_slab(fill = "#C0BA79", color = "black", linewidth = 0.5) +
+  filter(!(candidate %in% unknown_cands)) |> 
+  ggplot(aes(x = -1*mean, fill=candidate, weight = precision)) +
+  # stat_slab(color = "black", linewidth = 0.5, alpha = 0.8, normalize = "all") +
+  geom_boxplot(color = "black", fill = "#C0BA79") +
+  # geom_density(color = "black", fill = "#C0BA79") +
+  facet_wrap(~ candidate, ncol = 1, scales = "free_y", strip.position = "left") +
   theme_bw() +
+  guides(fill = "none") +
   geom_vline(xintercept = 0, linetype = "dashed") +
   labs(x = expression(alpha), y = "") +
+  scale_fill_manual(values = rep("#C0BA79", 10)) +
   theme_medsl() +
   theme(
+    legend.background = element_blank(),
+    strip.text.y.left = element_text(angle = 360, hjust = 0.95, size = 12),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_blank(),
     panel.grid.major.x = element_blank()
-  ) +
-  xlim(c(-2, 2))
+  )
 
 ggsave("figs/cat_aggregated.jpg", plot = cat_aggregated, width = 10, height = 6, units = "in")
-ggsave("figs/cat_aggregated_others.jpg", plot = cat_aggregated_others, width = 6, height = 10, units = "in")
+ggsave("figs/cat_aggregated_others.jpg", plot = cat_aggregated_others, width = 10, height = 10, units = "in")
 
 ## categorical - params
 
@@ -235,17 +282,6 @@ p2 <- merged |>
 ggsave("figs/dime_comparison.jpeg", p2, width = 8, height = 12, units = "in")
 
 #######
-
-d <- tibble(r = brms::rhat(ber_1pl), type = "Bernoulli 1-Parameter") |> 
-  bind_rows(
-    tibble(r = brms::rhat(ber_2pl), type = "Bernoulli 2-Parameter")
-  ) |> 
-  bind_rows(
-    tibble(r = summarise_draws(cat_2pl)$rhat, type = "Categorical 2-Parameter")
-  )
-
-datasummary(r * type ~ Mean + Median + Max + SD, data = d)
-
 
 beta_sum <- beta |> 
   summarise(mean_beta = mean(value), 
@@ -367,17 +403,29 @@ choices <- df |>
   ))
 
 voters <- df |> 
-  select(cvr_id, race_id, candidate_id) |> 
-  arrange(race_id, candidate_id) |> 
+  select(cvr_id, race_id, n) |> 
+  arrange(race_id, desc(n)) |> 
   distinct(cvr_id) |> 
   mutate(id = row_number()) |> 
   left_join(choices)
 
-joined <- cat_2pl |> 
-  spread_draws(alpha[id], ndraws = 1000) |> 
-  ungroup() |> 
+joined = summaries |> 
   left_join(voters, join_by(id)) |> 
-  drop_na(candidate) 
+  drop_na(candidate)
+
+unknown_cands = filter(joined, n() < 5, .by = candidate) |> 
+  distinct(candidate) |> 
+  pull(candidate)
+
+bayes_summaries = joined |> 
+  filter(!(candidate %in% unknown_cands)) |> 
+  summarize(
+    bayes_ideal = weighted.mean(mean, precision),
+    .by = c(race, candidate)
+  ) |> 
+  mutate(
+    bayes_ideal = (bayes_ideal-mean(bayes_ideal))/sd(bayes_ideal)
+  )
 
 joined |> 
   summarize(
@@ -416,13 +464,14 @@ fwrite(dime, "data/dime_ideals.csv")
 ## then manually merge ideal points
 
 d = read_csv("data/bayes_ideals.csv") |> 
-  drop_na(dime_ideal)
+  drop_na(dime_ideal) |> 
+  select(-bayes_ideal) |> 
+  inner_join(bayes_summaries, join_by(race, candidate))
 
 comparison = expand_grid(c1 = d$candidate, c2 = d$candidate) |> 
   filter(c1 != c2) |> 
   left_join(d, join_by(c1 == candidate)) |> 
   left_join(d, join_by(c2 == candidate)) |> 
-  # filter(race.x == race.y) |>
   mutate(
     cut_bayes = (bayes_ideal.x + bayes_ideal.y)/2,
     cut_dime = (dime_ideal.x + dime_ideal.y)/2
@@ -448,8 +497,3 @@ p = comparison |>
 ggsave("figs/dime_comparison.jpeg", plot = p, width = 10, height = 8, units = "in")
 
 cor(comparison$cut_bayes, comparison$cut_dime)
-
-comparison
-
-fit <- fixest::feols(cut_dime ~ cut_bayes*race, data = comparison)
-summary(fit)
