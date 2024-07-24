@@ -24,7 +24,7 @@ tar_config_set(
 
 list(
   # home directory for data
-  tar_target(cvr_path, "../cvrs_shared/data/pass1/"),
+  tar_target(cvr_path, "../cvrs_shared/data/pass2/"),
   # prep data
   tar_target(data, get_data(path = cvr_path, st = "COLORADO", num=100000)),
   tar_target(data_partisan, get_data(path = cvr_path, st = "COLORADO", partisan_only = TRUE, num=100000)),
@@ -43,6 +43,6 @@ list(
   # plots
   tar_target(p_ber_ideals, plot_ber_ideals(fit_bin_1pl, fit_bin_2pl)),
   tar_target(p_ber_params, plot_ber_params(fit_bin_2pl)),
-  tar_target(p_traces, plot_traces(fit_bin_1pl, fit_bin_2pl, fit_cat2pl_adams)),
-  tar_target(p_rhats, plot_rhats(fit_bin_1pl, fit_bin_2pl, fit_cat2pl_adams))
+  tar_target(p_traces, plot_traces(fit_bin_1pl, fit_bin_2pl, fit_cat2pl_adams))
+  # tar_target(p_rhats, plot_rhats(fit_bin_1pl, fit_bin_2pl, fit_cat2pl_adams))
 )
