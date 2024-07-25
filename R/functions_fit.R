@@ -41,6 +41,8 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE){
     m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = FALSE)
     m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = TRUE)
     
+    stan_data$threaded = 1
+    
     fit <- m$pathfinder(
       data = stan_data,
       seed = 02139,
@@ -49,7 +51,8 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE){
     
     path <- str_c("fits/", file_name, "_numV", as.character(stan_data$J), "_var.rds")
     
-  } else {
+  } 
+  else {
     m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = TRUE)
     
     fit <- m$sample(
