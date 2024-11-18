@@ -1,113 +1,95 @@
-// Multinomial 2PL IRT Model
-// Accounts for differing choice sets for different voters 
-// and different candidates available in different races
-// vectorized and parallelized version
-
+// Categorical 2PL IRT Model
+// Streamlined version
 functions {
   real partial_sum(array[, ] int votes_slice,
-                   int start, int end,
-                   array[] real alpha,
-                   array[,] real beta,
-                   array[,] real gamma,
-                   real mu_beta,
-                   array[,] int candidates,
-                   array[,] int eligibility) {
-    
-    int K = dims(candidates)[1];
-    int C = dims(candidates)[2];
+                   int start, int end, int k,
+                   vector alpha,
+                   vector diff_s,
+                   vector disc_s) {
+                     
     int N_slice = end - start + 1;
-    array[N_slice] real alpha_slice = alpha[start:end];
-    array[N_slice, K] int eligibility_slice = eligibility[start:end, 1:K];
-    
+    vector[N_slice] alpha_slice = alpha[start:end];
+
     real partial_log_lik = 0;
     
-    for (j in 1:N_slice) {
-      matrix[K, C] logits = rep_matrix(-1e8, K, C); // Initialize logits
-      for (k in 1:K) {
-        if (eligibility_slice[j, k] == 1) {
-          for (c in 1:C) {
-            if (candidates[k, c] == 1) {
-              logits[k, c] = gamma[k, c] * alpha_slice[j] - (beta[k, c] + mu_beta);
-            }
-          }
-          partial_log_lik += categorical_logit_lpmf(votes_slice[j, k] | logits[k]');
+    for (j in 1:N_slice){
+        if (votes_slice[j, k] > 0){
+          partial_log_lik += categorical_logit_lpmf(votes_slice[j, k] | disc_s .* (alpha_slice[j] - diff_s));
         }
       }
-    }
+    
     return partial_log_lik;
   }
 }
 
 data {
-  int<lower=0, upper=1> parallelize; // should the code be run using within-chain threading?
-  int<lower=1> J; // number of voters
-  int<lower=1> K; // number of races
-  int<lower=1> C; // number of candidates
-  array[K, C] int<lower=0, upper=1> candidates; // candidate availability matrix for each race
-  array[J, K] int<lower=0, upper=C> votes; // votes matrix (0 if not voting in that race)
-  array[J, K] int<lower=0, upper=1> eligibility; // 1 if voter is eligible for race, 0 otherwise
+  int<lower=0, upper=1> threaded; // should the code be run using within-chain threading?
+  int<lower=1> N_voters; // number of voters
+  int<lower=1> N_contests; // number of contests
+  int<lower=1> N_cands; // number of candidates
+  array[N_voters, N_contests] int<lower=0, upper=N_cands> votes; // votes matrix (0 if not voting in that race)
+  array[N_contests] int<lower=0, upper=N_cands> sizes; // number of candidates in each race
 }
 
 parameters {
-  real mu_beta; // mean question difficulty
-  array[J] real alpha; // latent ability of voter j - mean latent ability
-  array[K, C] real beta_raw;  // difficulty for each race
-  array[K, C] real gamma_raw; // discrimination for each race
-  real<lower=0> sigma_beta; // scale of difficulties
-  real<lower=0> sigma_gamma; // scale of log discrimination
+  real mean_diff; // mean question difficulty
+  vector[N_voters] alpha; // latent ability of voter j - mean latent ability
+  vector[N_cands] diff_raw;  // difficulty for each race
+  vector[N_cands] disc_raw; // discrimination for each race
+  real<lower=0> sigma_diff; // scale of difficulties
+  real<lower=0> sigma_disc; // scale of log discrimination
 }
 
 transformed parameters {
-  array[K, C] real beta = rep_array(0, K, C);  // difficulty for each race
-  array[K, C] real gamma = rep_array(0, K, C); // discrimination for each race
+  vector[N_cands] diff = rep_vector(0, N_cands);  // ragged difficulty for each race
+  vector[N_cands] disc = rep_vector(0, N_cands); // ragged discrimination for each race
   
-  for (k in 1:K){
-    int reference = 1;
-    for (c in 1:C){
-      if (candidates[k, c] == 1) {
-        if (reference == 1){
-          reference = 0;
-        } else {
-          beta[k, c] = beta_raw[k, c];
-          gamma[k, c] = gamma_raw[k, c];
-        }
+  { 
+    int pos_params = 0;
+    
+    for (k in 1:N_contests){
+      for (c in 2:sizes[k]){
+        diff[pos_params + c] = diff_raw[pos_params + c] + mean_diff;
+        disc[pos_params + c] = disc_raw[pos_params + c];
       }
+      
+      pos_params += sizes[k];
     }
   }
 }
 
 model {
   // Priors
-  mu_beta ~ student_t(3, 0, 2.5);
+  mean_diff ~ student_t(3, 0, 2.5);
   alpha ~ std_normal(); // set to N(0, 1) for identification
+  sigma_diff ~ student_t(3, 0, 2.5);
+  sigma_disc ~ student_t(3, 0, 2.5);
   
-  for (k in 1:K){
-    beta_raw[k, ] ~ normal(0, sigma_beta);
-    gamma_raw[k,] ~ normal(0, sigma_gamma);
-  }
+  int pos_target = 1;
   
-  sigma_beta ~ student_t(3, 0, 2.5);
-  sigma_gamma ~ student_t(3, 0, 2.5);
-  
-  if (parallelize == 0){
-    // Likelihood
-    for (j in 1:J) {
-      matrix[K, C] logits = rep_matrix(-1e8, K, C); // Initialize logits
-      for (k in 1:K) {
-        if (eligibility[j, k] == 1) {
-          for (c in 1:C) {
-            if (candidates[k, c] == 1) {
-              logits[k, c] = gamma[k, c] * alpha[j] - (beta[k, c] + mu_beta);
-            }
-          }
-          target += categorical_logit_lpmf(votes[j, k] | logits[k]');
-        }
+  for (k in 1:N_contests) {
+    int s = sizes[k];
+    
+    // move on to the next race if we don't use this one for whatever reason
+    if (s == 0){
+      continue;
+    }
+    
+    // set hierarchical priors
+    segment(diff_raw, pos_target, s) ~ normal(0, sigma_diff);
+    segment(disc_raw, pos_target, s) ~ normal(0, sigma_disc);
+    
+    vector[s] disc_s = segment(disc, pos_target, s);
+    vector[s] diff_s = segment(diff, pos_target, s);
+    
+    for (j in 1:N_voters){
+      if (votes[j, k] > 0){
+        votes[j, k] ~ categorical_logit(disc_s .* alpha[j] - diff_s);
       }
     }
-  }
-  if (parallelize == 1){
-    int grainsize = 1;
-
-    target += reduce_sum(partial_sum, votes, grainsize, alpha, beta, gamma, mu_beta, candidates, eligibility);
+    
+    // iterate to next race
+    pos_target += s;
+    
   }
 }
