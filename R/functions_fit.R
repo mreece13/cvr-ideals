@@ -31,6 +31,8 @@ fit_bernoulli <- function(data, type){
     file_refit = "on_change"
   )
   
+  str_c("fits/bernoulli_", type)
+  
 }
 
 fit_stan <- function(model, stan_data, file_name, variational = FALSE){

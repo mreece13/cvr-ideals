@@ -9,6 +9,7 @@ library(bayesplot)
 library(targets)
 library(posterior)
 library(factor.switching)
+library(modelsummary)
 
 source("../medsl_theme.R")
 
@@ -17,7 +18,7 @@ ber_2pl <- readRDS("fits/bernoulli_2pl.rds")
 
 ## Categorical 2PL
 
-cat_2pl_gammas <- readRDS("fits/cat_2pl_streamlined_numV7535_full.rds") |> 
+cat_2pl_gammas <- readRDS("fits/cat_2pl_streamlined_numV7344_full.rds") |> 
   as_draws_matrix() |> 
   subset_draws(variable = "gamma")
 
@@ -34,7 +35,7 @@ out <- rsp_exact(
   verbose = FALSE
 )
 
-cat_2pl <- readRDS("fits/cat_2pl_streamlined_numV7535_full.rds") |>
+cat_2pl <- readRDS("fits/cat_2pl_streamlined_numV7344_full.rds") |>
   as_draws_df() |>
   sweep(1, out$sign_vectors, FUN = "*")
 
@@ -45,7 +46,7 @@ summaries = cat_2pl |>
   separate_wider_delim(cols = name, delim = "[", names = c("term", "id")) |> 
   mutate(id = str_remove(id, "]") |> as.numeric()) |> 
   summarize(
-    mean = mean(value),
+    mean = -1*mean(value),
     precision = 1/var(value),
     .by = id
   )
@@ -71,8 +72,8 @@ d |>
 rand_cat <- str_c("alpha[", sample(1:10000, size = 20), "]")
 
 # check normality of \alpha
-readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> as_draws_df() |> select(contains("alpha")) |> as.matrix() |> mean()
-readRDS("fits/cat_2pl_streamlinednumV7535_full.rds") |> as_draws_df() |> select(contains("alpha")) |> as.matrix() |> sd()
+readRDS("fits/cat_2pl_streamlined_numV7344_full.rds") |> as_draws_df() |> select(contains("alpha")) |> as.matrix() |> mean()
+readRDS("fits/cat_2pl_streamlined_numV7344_full.rds") |> as_draws_df() |> select(contains("alpha")) |> as.matrix() |> sd()
   
 cat_ideals <- cat_2pl |> 
   select(any_of(rand_cat), starts_with(".")) |>
@@ -90,7 +91,7 @@ ggsave("figs/cat_ideals.jpg", plot = cat_ideals, width = 10, height = 6, units =
 
 ## categorical - aggregated
 
-data <- tar_read(data_adams)
+data <- tar_read(data) |> filter(county_name == "ADAMS")
 
 # Assign unique IDs to races and candidates
 ids <- data |> 
@@ -158,10 +159,8 @@ cat_aggregated <- joined |>
 cat_aggregated_others = joined |> 
   filter(!(candidate %in% c("JOSEPH R BIDEN", "DONALD J TRUMP"))) |>
   filter(!(candidate %in% unknown_cands)) |> 
-  ggplot(aes(x = -1*mean, fill=candidate, weight = precision)) +
-  # stat_slab(color = "black", linewidth = 0.5, alpha = 0.8, normalize = "all") +
-  geom_boxplot(color = "black", fill = "#C0BA79") +
-  # geom_density(color = "black", fill = "#C0BA79") +
+  ggplot(aes(y = candidate, weight = precision, x = mean)) +
+  geom_jitter(color = "black", fill = "#C0BA79", height = 0.2) +
   facet_wrap(~ candidate, ncol = 1, scales = "free_y", strip.position = "left") +
   theme_bw() +
   guides(fill = "none") +
@@ -182,54 +181,54 @@ ggsave("figs/cat_aggregated_others.jpg", plot = cat_aggregated_others, width = 1
 
 ## categorical - params
 
-sds <- cat_2pl |> 
-  spread_draws(alpha[cvr_id]) |> 
-  ungroup() |> 
-  summarise(sd = sd(alpha), .by = ".draw") |> 
-  pull(sd)
-
-draws <- cat_2pl |> 
-  as_draws_df() |>
-  select(starts_with("beta["), starts_with("gamma[")) |> 
-  sweep(1, sds, "*") |> 
-  mutate(across(everything(), ~ na_if(.x, 0))) |> 
-  pivot_longer(cols = everything(), values_drop_na = TRUE) |> 
-  separate_wider_delim(cols = name, delim = "[", names = c("parameter", "race_id")) |> 
-  separate_wider_delim(cols = race_id, delim = ",", names = c("race_id", "candidate_id")) |> 
-  mutate(candidate_id = str_remove(candidate_id, "]")) |> 
-  mutate(race_id = as.numeric(race_id),
-         candidate_id = as.numeric(candidate_id)) |>
-  left_join(races) |> 
-  left_join(candidates) |> 
-  mutate(candidate = str_squish(candidate)) |> 
-  mutate(candidate = case_match(
-    candidate,
-    "JOSEPH KISHORE NORISSA SANTA CRUZ" ~ "JOSEPH KISHORE",
-    "JORDAN CANCER SCOTT JENNIFER TEPOOL" ~ "JORDAN SCOTT",
-    "BILL HAMMONS ERIC BODENSTAB" ~ "BILL HAMMONS",
-    "MARK CHARLES ADRIAN WALLACE" ~ "MARK CHARLES",
-    "PRINCESS KHADIJAH MARYAM JACOB FAMBRO KHADIJAH MARYAM JACOB SR" ~ "PRINCESS KHADIJAH JACOB-FAMBRO",
-    "KYLE KENLEY KOPITKE NATHAN RE VO SORENSON" ~ "KYLE KENLEY",
-    "JOE MC HUGH ELIZABETH STORM" ~ "JOE MCHUGH",
-    "BLAKE HUBER FRANK ATWOOD" ~ "BLAKE HUBER",
-    "PHIL COLLINS BILLY JOE PARKER" ~ "PHIL COLLINS",
-    .default = candidate
-  ))
-
-p2 <- draws |> 
-  filter(str_detect(race, "US PRESIDENT"), 
-         candidate %in% c("JOSEPH R BIDEN", "GLORIA LA RIVA", "DONALD J TRUMP", "BILL HAMMONS"),
-         parameter == "gamma") |> 
-  # mutate(parameter = factor(parameter, labels = c("Difficulty", "Discrimination"))) |>
-  bind_rows(tibble(value = 0, race = "US PRESIDENT", candidate = "BILL HAMMONS")) |> 
-  ggplot(aes(x = value, y = candidate)) +
-  stat_halfeye(normalize = "xy") +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
-  # facet_wrap(~ parameter, scales = "free_x") +
-  labs(x = "", y = "", title = "Discrimination Parameter after Sign-Flipping") +
-  theme_bw()
-
-ggsave("figs/cat_params.jpg", plot = cat_params, width = 10, height = 6, units = "in")
+# sds <- cat_2pl |> 
+#   spread_draws(alpha[cvr_id]) |> 
+#   ungroup() |> 
+#   summarise(sd = sd(alpha), .by = ".draw") |> 
+#   pull(sd)
+# 
+# draws <- cat_2pl |> 
+#   as_draws_df() |>
+#   select(starts_with("beta["), starts_with("gamma[")) |> 
+#   sweep(1, sds, "*") |> 
+#   mutate(across(everything(), ~ na_if(.x, 0))) |> 
+#   pivot_longer(cols = everything(), values_drop_na = TRUE) |> 
+#   separate_wider_delim(cols = name, delim = "[", names = c("parameter", "race_id")) |> 
+#   separate_wider_delim(cols = race_id, delim = ",", names = c("race_id", "candidate_id")) |> 
+#   mutate(candidate_id = str_remove(candidate_id, "]")) |> 
+#   mutate(race_id = as.numeric(race_id),
+#          candidate_id = as.numeric(candidate_id)) |>
+#   left_join(races) |> 
+#   left_join(candidates) |> 
+#   mutate(candidate = str_squish(candidate)) |> 
+#   mutate(candidate = case_match(
+#     candidate,
+#     "JOSEPH KISHORE NORISSA SANTA CRUZ" ~ "JOSEPH KISHORE",
+#     "JORDAN CANCER SCOTT JENNIFER TEPOOL" ~ "JORDAN SCOTT",
+#     "BILL HAMMONS ERIC BODENSTAB" ~ "BILL HAMMONS",
+#     "MARK CHARLES ADRIAN WALLACE" ~ "MARK CHARLES",
+#     "PRINCESS KHADIJAH MARYAM JACOB FAMBRO KHADIJAH MARYAM JACOB SR" ~ "PRINCESS KHADIJAH JACOB-FAMBRO",
+#     "KYLE KENLEY KOPITKE NATHAN RE VO SORENSON" ~ "KYLE KENLEY",
+#     "JOE MC HUGH ELIZABETH STORM" ~ "JOE MCHUGH",
+#     "BLAKE HUBER FRANK ATWOOD" ~ "BLAKE HUBER",
+#     "PHIL COLLINS BILLY JOE PARKER" ~ "PHIL COLLINS",
+#     .default = candidate
+#   ))
+# 
+# cat_params <- draws |> 
+#   filter(str_detect(race, "US PRESIDENT"), 
+#          candidate %in% c("JOSEPH R BIDEN", "GLORIA LA RIVA", "DONALD J TRUMP", "BILL HAMMONS"),
+#          parameter == "gamma") |> 
+#   # mutate(parameter = factor(parameter, labels = c("Difficulty", "Discrimination"))) |>
+#   bind_rows(tibble(value = 0, race = "US PRESIDENT", candidate = "BILL HAMMONS")) |> 
+#   ggplot(aes(x = value, y = candidate)) +
+#   stat_halfeye(normalize = "xy") +
+#   geom_vline(xintercept = 0, linetype = "dashed", color = "blue") +
+#   # facet_wrap(~ parameter, scales = "free_x") +
+#   labs(x = "", y = "", title = "Discrimination Parameter after Sign-Flipping") +
+#   theme_bw()
+# 
+# ggsave("figs/cat_params.jpg", plot = cat_params, width = 10, height = 6, units = "in")
 
 
 ## dime comparison
@@ -245,7 +244,7 @@ merge_choices <- function(race, candidate){
     arrange(race_id, candidate_id) |> 
     distinct(cvr_id) |> 
     mutate(id = row_number()) |> 
-    left_join(choices) |> 
+    left_join(choices, by = "cvr_id") |> 
     drop_na(candidate) |> 
     filter(candidate == {{ candidate }}) |> 
     select(id)
@@ -255,7 +254,10 @@ dime <- read_csv("data/dime_matches.csv") |>
   mutate(recipient.cfscore = (recipient.cfscore - mean(recipient.cfscore, na.rm = TRUE)/sd(recipient.cfscore, na.rm = TRUE))) |> 
   drop_na(recipient.cfscore) |> 
   distinct(office, district, candidate, .keep_all = TRUE) |> 
-  mutate(race = str_c(office, district, sep = " - ")) |> 
+  mutate(
+    district = str_pad(district, width = 3, side = "left", pad = "0"),
+    race = str_c(office, district, sep = " - ")
+  ) |> 
   select(race, candidate, dime_score = recipient.cfscore) |> 
   filter(race %in% unique(df$race)) |> 
   filter(n()>1, .by = race)
@@ -269,7 +271,7 @@ draws <- cat_2pl |>
 merged <- dime |> 
   mutate(voters = map2(race, candidate, merge_choices)) |> 
   unnest(cols = voters) |> 
-  left_join(draws)
+  left_join(draws, join_by(id))
 
 p2 <- merged |> 
   ggplot(aes(x = alpha, y = candidate)) +
@@ -463,9 +465,9 @@ fwrite(dime, "data/dime_ideals.csv")
 
 ## then manually merge ideal points
 
-d = read_csv("data/bayes_ideals.csv") |> 
-  drop_na(dime_ideal) |> 
-  select(-bayes_ideal) |> 
+d = read_csv("data/dime_matches.csv") |> 
+  rename(dime_ideal = recipient.cfscore) |> 
+  mutate(race = str_c(office, district, sep = " - ")) |> 
   inner_join(bayes_summaries, join_by(race, candidate))
 
 comparison = expand_grid(c1 = d$candidate, c2 = d$candidate) |> 
