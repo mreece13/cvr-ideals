@@ -24,15 +24,15 @@ tar_config_set(
 
 username <- Sys.info()["user"]
 if (username == "mason") {
-  PATH_parq = "../cvrs/data/pass2"
+  PATH_PARQ = "../cvrs/data/pass2"
 } else if (username == "mreece") {
-  PATH_parq = "../cvrs_shared/data/pass2"
+  PATH_PARQ = "../cvrs_shared/data/pass2"
 }
 
 list(
   # prep data
-  tar_target(data, get_data(path = PATH_parq, st = "COLORADO", num = 100000)),
-  tar_target(data_partisan, get_data(path = PATH_parq, st = "COLORADO", partisan_only = TRUE, num = 100000)),
+  tar_target(data, get_data(path = PATH_PARQ, st = "COLORADO", num = 100000)),
+  tar_target(data_partisan, get_data(path = PATH_PARQ, st = "COLORADO", partisan_only = TRUE, num = 100000)),
   tar_target(data_adams, filter_byCounty(data, county = "ADAMS")),
   # format data for Stan
   tar_target(stan_data, get_stan_data(data)),
