@@ -105,19 +105,13 @@ get_stan_data <- function(data){
     select(-cvr_id, -county_name) |> 
     as.matrix()
   
-  num_cands <- df |> 
-    distinct(race, race_id, candidate) |> 
-    count(race_id) |> 
-    pull(n)
-  
   # Prepare data for Stan
   stan_data <- list(
-    threaded = 0,
-    J = df |> distinct(county_name, cvr_id) |> tally() |> pull(),
-    K = n_distinct(ids$race),
-    C = length(ids$candidate),
+    N_voters = distinct(df, county_name, cvr_id) |> tally() |> pull(),
+    N_contests = n_distinct(ids$race),
+    N_cands = length(ids$candidate),
     votes = votes_matrix,
-    sizes = num_cands
+    sizes = distinct(df, race, race_id, candidate) |> count(race_id) |> pull(n)
   )
   
   return(stan_data)

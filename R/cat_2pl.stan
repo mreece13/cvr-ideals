@@ -23,7 +23,6 @@ functions {
 }
 
 data {
-  int<lower=0, upper=1> threaded; // should the code be run using within-chain threading?
   int<lower=1> N_voters; // number of voters
   int<lower=1> N_contests; // number of contests
   int<lower=1> N_cands; // number of candidates

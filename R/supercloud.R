@@ -74,6 +74,6 @@ fit <- m$sample(
   refresh = 100,
 )
 
-path <- str_c("fits/", file_name, "_numV", as.character(stan_data$N_groups), "_grouped.rds")
+path <- str_c("fits/cat_2pl_grps_numV", as.character(stan_data$N_groups), ".rds")
 
 fit$save_object(path)
