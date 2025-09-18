@@ -1,9 +1,13 @@
 #!/bin/bash
 
-source /etc/profile
-# Loading the required module
-module load anaconda/2023b
-source activate bayesR
+# Job Flags
+#SBATCH -p mit_normal
+#SBATCH -c 8
+#SBATCH --mem=64G
+
+module load miniforge
+module load gcc
+mamba activate cvr-ideals
 
 # Run the script
 Rscript -e "targets::tar_make()"
