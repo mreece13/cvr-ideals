@@ -27,6 +27,8 @@ if (username == "mason") {
   PATH_PARQ = "../cvrs/data/pass2"
 } else if (username == "mreece") {
   PATH_PARQ = "../cvrs_shared/data/pass2"
+} else if (username == "mpreece") {
+  PATH_PARQ = "~/orcd/pool/supercloud-cvrs/data/pass2"
 }
 
 list(
@@ -38,13 +40,13 @@ list(
   tar_target(stan_data, get_stan_data(data), format="qs"),
   tar_target(stan_data_adams, get_stan_data(data_adams), format="qs"),
   # fit `brms` models
-  tar_target(fit_bin_1pl, fit_bernoulli(data_partisan, type = "1pl"), format = "file"),
-  tar_target(fit_bin_2pl, fit_bernoulli(data_partisan, type = "2pl"), format = "file"),
+  # tar_target(fit_bin_1pl, fit_bernoulli(data_partisan, type = "1pl"), format = "file"),
+  # tar_target(fit_bin_2pl, fit_bernoulli(data_partisan, type = "2pl"), format = "file"),
   # fit stan models
   tar_target(stan_2pl, "R/cat_2pl.stan", format = "file"),
   tar_target(fit_cat2pl_adams, fit_stan(stan_2pl, stan_data_adams, "cat_2pl"), format = "file"),
-  tar_target(fit_cat2pl_var_adams, fit_stan(stan_2pl, stan_data_adams, "cat_2pl", variational = TRUE), format = "file"),
-  tar_target(fit_cat2pl_var, fit_stan(stan_2pl, stan_data, "cat_2pl", variational = TRUE), format = "file")
+  # tar_target(fit_cat2pl_var_adams, fit_stan(stan_2pl, stan_data_adams, "cat_2pl", variational = TRUE), format = "file"),
+  # tar_target(fit_cat2pl_var, fit_stan(stan_2pl, stan_data, "cat_2pl", variational = TRUE), format = "file")
   # plots
   # tar_target(p_ber_ideals, plot_ber_ideals(fit_bin_1pl, fit_bin_2pl)),
   # tar_target(p_ber_params, plot_ber_params(fit_bin_2pl)),
