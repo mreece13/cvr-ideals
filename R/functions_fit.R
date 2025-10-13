@@ -55,7 +55,9 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE){
     
   } 
   else {
-    m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = TRUE)
+    # m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = TRUE)
+    m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = FALSE)
+    m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = FALSE)
     
     fit <- m$sample(
       data = stan_data,
@@ -63,8 +65,8 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE){
       iter_warmup = 1000,
       iter_sampling = 1000,
       seed = 02139,
-      parallel_chains = 4
-      # threads_per_chain = 20
+      parallel_chains = 4,
+      threads_per_chain = 20
     )
     
     path <- str_c("fits/", file_name, "_numV", as.character(stan_data$J), "_full.rds")

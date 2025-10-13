@@ -1,22 +1,20 @@
 // Categorical 2PL IRT Model
-// Streamlined version
+// Streamlined version with threading
 functions {
-  real partial_sum(array[, ] int votes_slice,
-                   int start, int end, int k,
+  real partial_sum(array[] int votes_slice,
+                   int start,
+                   int end,
                    vector alpha,
                    vector diff_s,
                    vector disc_s) {
-                     
-    int N_slice = end - start + 1;
-    vector[N_slice] alpha_slice = alpha[start:end];
-
     real partial_log_lik = 0;
     
-    for (j in 1:N_slice){
-        if (votes_slice[j, k] > 0){
-          partial_log_lik += categorical_logit_lpmf(votes_slice[j, k] | disc_s .* (alpha_slice[j] - diff_s));
-        }
+    for (j in 1:(end - start + 1)) {
+      int voter_idx = start + j - 1;
+      if (votes_slice[j] > 0) {
+        partial_log_lik += categorical_logit_lpmf(votes_slice[j] | disc_s .* (alpha[voter_idx] - diff_s));
       }
+    }
     
     return partial_log_lik;
   }
@@ -81,11 +79,15 @@ model {
     vector[s] disc_s = segment(disc, pos_target, s);
     vector[s] diff_s = segment(diff, pos_target, s);
     
-    for (j in 1:N_voters){
-      if (votes[j, k] > 0){
-        votes[j, k] ~ categorical_logit(disc_s .* alpha[j] - diff_s);
-      }
-    }
+    // Threaded log-likelihood calculation using reduce_sum
+    target += reduce_sum(
+      partial_sum,
+      votes[, k],  // slice over all voters for contest k
+      1,           // grainsize: number of voters per thread (can tune this)
+      alpha,       // full alpha vector
+      diff_s,      // difficulty parameters for this contest
+      disc_s       // discrimination parameters for this contest
+    );
     
     // iterate to next race
     pos_target += s;
