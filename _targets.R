@@ -12,8 +12,8 @@ options("future" = FALSE)
 tar_option_set(
   packages = c("tidyverse", "brms", "arrow", "tidybayes", "cmdstanr", "posterior"),
   memory = "transient",
-  format = "parquet",
   error = "null",
+  format = "auto",
   garbage_collection = TRUE
 )
 
@@ -33,7 +33,7 @@ list(
   tar_target(data_adams, filter_byCounty(data, county = "ADAMS")),
   # format data for Stan
   # tar_target(stan_data, get_stan_data(data), format="qs"),
-  tar_target(stan_data_adams, get_stan_data(data_adams)),
+  tar_target(stan_data_adams, get_stan_data(data_adams), format = "qs"),
   # fit `brms` models
   # tar_target(fit_bin_1pl, fit_bernoulli(data_partisan, type = "1pl"), format = "file"),
   # tar_target(fit_bin_2pl, fit_bernoulli(data_partisan, type = "2pl"), format = "file"),
