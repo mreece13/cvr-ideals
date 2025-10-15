@@ -14,7 +14,8 @@ fit <- m$sample(
   data = stan_data,
   chains = 2,
   iter_warmup = 500,
-  iter_sampling = 100
+  iter_sampling = 100,
+  opencl_ids = c(0, 0)
 )
 
 fit$save_object("fits/cat_2pl_gpu.rds")
