@@ -19,19 +19,19 @@ m$compile(cpp_options = list(stan_opencl = TRUE), force_recompile = FALSE)
 
 fit <- m$sample(
   data = stan_data,
-  chains = 1,
+  chains = 2,
   iter_warmup = 500,
   iter_sampling = 100,
   # threads_per_chain = 2
 )
 
-fit <- m$pathfinder(
-  data = stan_data,
-  seed = 02139,
-  num_threads = 5
-)
+# fit <- m$pathfinder(
+#   data = stan_data,
+#   seed = 02139,
+#   num_threads = 5
+# )
 
-fit$save_object("fits/cat_2pl_streamlined2.rds")
+fit$save_object("fits/cat_2pl_gpu.rds")
 
 fit <- read_rds("fits/cat_2pl_streamlined.rds")
 
