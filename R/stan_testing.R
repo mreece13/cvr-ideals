@@ -9,62 +9,20 @@ library(posterior)
 
 source("../medsl_theme.R")
 
-data <- targets::tar_read(data_adams) |> 
-  filter(candidate != "undervote")
+data <- targets::tar_read(data_adams)
+stan_data = targets::tar_read(stan_data_adams)
+# stan_data$N_dims <- 2
 
-bad_races <- df |> 
-  count(county_name, cvr_id, race_id) |> 
-  filter(n > 1) |> 
-  distinct(race_id) |> 
-  pull(race_id)
-
-ids |> ungroup() |>  filter(race_id %in% bad_races) |> distinct(race)
-
-df |> 
-  filter(race == "STATE HOUSE - 058") |> 
-  filter(n() > 1, .by = cvr_id)
-
-# Assign unique IDs to races and candidates
-ids <- data |> 
-  distinct(race, candidate) |> 
-  arrange(race, candidate) |> 
-  group_by(race) |> 
-  mutate(candidate_id = 1:n(),
-         race_id = cur_group_id())
-
-# Join back to the original data
-df <- left_join(data, ids, join_by(race, candidate))
-
-# Create the votes matrix
-votes_matrix <- df |> 
-  select(cvr_id, race_id, candidate_id) |> 
-  arrange(race_id, candidate_id) |>
-  pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |> 
-  select(-cvr_id) |> 
-  as.matrix()
-
-num_cands <- df |> 
-  distinct(race, race_id, candidate) |> 
-  count(race_id) |> 
-  pull(n)
-
-# Prepare data for Stan
-stan_data <- list(
-  threaded = 0,
-  J = n_distinct(df$cvr_id),
-  K = n_distinct(ids$race),
-  C = length(ids$candidate),
-  votes = votes_matrix,
-  sizes = num_cands
-)
-
-m <- cmdstan_model("R/cat_2pl_streamlined.stan", compile = FALSE)
+m <- cmdstan_model("R/cat_2pl_gpu.stan", compile = FALSE)
 m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = FALSE)
+m$compile(cpp_options = list(stan_opencl = TRUE), force_recompile = FALSE)
 
 fit <- m$sample(
   data = stan_data,
   chains = 1,
-  iter_sampling = 200
+  iter_warmup = 500,
+  iter_sampling = 100,
+  # threads_per_chain = 2
 )
 
 fit <- m$pathfinder(
