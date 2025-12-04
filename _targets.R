@@ -19,28 +19,28 @@ tar_option_set(
 
 username <- Sys.info()["user"]
 if (username == "mason") {
-  PATH_PARQ = "../cvrs/data/pass2"
-} else if (username == "mreece") {
-  PATH_PARQ = "../cvrs_shared/data/pass2"
+  PATH_PARQ = "../cvrs/data/pass3"
 } else if (username == "mpreece") {
-  PATH_PARQ = "~/orcd/pool/supercloud-cvrs/data/pass2"
+  PATH_PARQ = "~/orcd/pool/supercloud-cvrs/data/pass3"
 }
 
 list(
   # prep data
-  tar_target(data, get_data(path = PATH_PARQ, st = "COLORADO", num = 100000)),
+  tar_target(data, get_data(path = PATH_PARQ, st = "COLORADO", num = 100000), format = "parquet"),
   # tar_target(data_partisan, get_data(path = PATH_PARQ, st = "COLORADO", partisan_only = TRUE, num = 100000)),
-  tar_target(data_adams, filter_byCounty(data, county = "ADAMS")),
+  tar_target(data_adams, filter_byCounty(data, county = "ADAMS"), format = "parquet"),
   # format data for Stan
-  # tar_target(stan_data, get_stan_data(data), format="qs"),
-  tar_target(stan_data_adams, get_stan_data(data_adams), format = "qs"),
+  # tar_target(stan_data, get_stan_data(data)),
+  tar_target(stan_data_adams, get_stan_data(data_adams)),
+  # tar_target(stan_data_adams_dim2, get_stan_data(data_adams, dims=2)),
   # fit `brms` models
   # tar_target(fit_bin_1pl, fit_bernoulli(data_partisan, type = "1pl"), format = "file"),
   # tar_target(fit_bin_2pl, fit_bernoulli(data_partisan, type = "2pl"), format = "file"),
   # fit stan models
   tar_target(stan_2pl, "R/cat_2pl.stan", format = "file"),
-  tar_target(fit_cat2pl_adams, fit_stan(stan_2pl, stan_data_adams, "cat_2pl"), format = "file")
-  # tar_target(fit_cat2pl_var_adams, fit_stan(stan_2pl, stan_data_adams, "cat_2pl", variational = TRUE), format = "file"),
+  tar_target(fit_cat2pl_adams, fit_stan(stan_2pl, stan_data_adams, "cat_2pl"), format = "file"),
+  # tar_target(fit_cat2pl_adams_dim2, fit_stan(stan_2pl, stan_data_adams_dim2, "cat_2pl_dims"), format = "file")
+  tar_target(fit_cat2pl_var_adams, fit_stan(stan_2pl, stan_data_adams, "cat_2pl", variational = TRUE), format = "file")
   # tar_target(fit_cat2pl_var, fit_stan(stan_2pl, stan_data, "cat_2pl", variational = TRUE), format = "file")
   # plots
   # tar_target(p_ber_ideals, plot_ber_ideals(fit_bin_1pl, fit_bin_2pl)),

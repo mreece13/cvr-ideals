@@ -55,7 +55,6 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE){
     
   } 
   else {
-    # m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = TRUE)
     m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = FALSE)
     m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = FALSE)
     

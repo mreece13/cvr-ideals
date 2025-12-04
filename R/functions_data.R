@@ -14,36 +14,31 @@ get_data <- function(path, st, partisan_only = FALSE, num = 1e9){
     field("county_name", string()),
     field("candidate", string()),
     field("district", string()),
-    field("magnitude", string()),
+    field("magnitude", int8()),
     field("office", string()),
-    field("party_detailed", string())
+    field("party", string())
   )
   
-  if (st == "all"){
-    base_data <- open_dataset(path,
-                              partitioning = c("state", "county_name"),
-                              schema = partial_schema,
-                              format = "parquet") |> 
-      filter(magnitude == "1", !is.na(office), !is.na(district)) |> 
-      select(-magnitude)
-  } else {
-    base_data <- open_dataset(path,
-                              partitioning = c("state", "county_name"),
-                              schema = partial_schema,
-                              format = "parquet") |> 
-      filter(state == st, magnitude == "1", !is.na(office), !is.na(district), candidate != "undervote") |> 
-      select(-magnitude) |> 
-      mutate(race = str_c(office, district, sep = " - "))
-  }
+  base_data <- open_dataset(path, partitioning = c("state", "county_name"), schema = partial_schema, format = "parquet") |>
+    filter(state == st, magnitude == 1, !is.na(office), !is.na(district), candidate != "undervote", candidate != "overvote", candidate != "writein") |>
+    select(-magnitude) |>
+    mutate(race = str_c(office, district, sep = "_"))
+
+  # pick some random people
+  randoms <- base_data |>
+    distinct(state, county_name, cvr_id) |>
+    collect() |> 
+    slice_sample(n=num)
   
   # What are the contested races?
   small_candidates <- base_data |> 
+    inner_join(randoms, join_by(state, county_name, cvr_id)) |>
     count(race, candidate) |> 
-    filter(n <= 20) |> 
+    filter(n <= 10) |> 
     distinct(race, candidate)
   
   contested_races <- base_data |> 
-    anti_join(small_candidates) |> 
+    anti_join(small_candidates, join_by(race, candidate)) |>
     distinct(race, candidate) |> 
     count(race) |> 
     filter(n > 1) |> 
@@ -52,35 +47,34 @@ get_data <- function(path, st, partisan_only = FALSE, num = 1e9){
   if (partisan_only){
     # What are the partisan races in the data?
     partisan_races <- base_data |> 
-      distinct(race, party_detailed) |>
-      filter(party_detailed != "NONPARTISAN") |> 
+      distinct(race, party) |>
+      filter(party != "nonpartisan") |> 
       distinct(race)
     
     contested_races <- inner_join(contested_races, partisan_races)
   }
   
-  # pick some random people
-  randoms <- base_data |>
-    distinct(county_name, cvr_id) |>
-    collect() |> 
-    slice_sample(n=num)
-  
-  # return the data
-  # one notable thing here is that there are some errors in the Colorado districts
-  # for statewide races that need to be corrected
   base_data |> 
-    inner_join(randoms, by = c("county_name", "cvr_id")) |>
-    inner_join(contested_races, by = c("race")) |> 
-    filter(!is.na(party_detailed)) |> 
-    mutate(choice_rep = as.numeric(party_detailed == "REPUBLICAN")) |> 
+    inner_join(randoms, join_by(state, county_name, cvr_id)) |>
+    inner_join(contested_races, join_by(race)) |> 
+    filter(!is.na(party)) |> 
+    mutate(choice_rep = as.numeric(party == "republican")) |> 
     collect()
 }
 
 filter_byCounty <- function(data, county){
-  filter(data, county_name == county)
+  small_candidates <- data |>
+    filter(county_name == county) |> 
+    count(race, candidate) |> 
+    filter(n <= 10) |> 
+    distinct(race, candidate)
+
+  data |>
+    filter(county_name == county) |>
+    anti_join(small_candidates, join_by(race, candidate))
 }
 
-get_stan_data <- function(data){
+get_stan_data <- function(data, dims=1){
   
   # Assign unique IDs to races and candidates
   ids <- data |> 
@@ -113,6 +107,8 @@ get_stan_data <- function(data){
     votes = votes_matrix,
     sizes = distinct(df, race, race_id, candidate) |> count(race_id) |> pull(n)
   )
+
+  if (dims > 1)stan_data$N_dims = dims
   
   return(stan_data)
   
