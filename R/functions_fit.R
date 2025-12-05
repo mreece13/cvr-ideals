@@ -1,4 +1,3 @@
-# R/functions_fit.R
 
 fit_bernoulli <- function(data, type){
   
@@ -27,20 +26,20 @@ fit_bernoulli <- function(data, type){
     iter = 2000,
     seed = 02139,
     silent = 0,
-    file = str_c("fits/bernoulli_", type),
+    file = glue("fits/bernoulli_{type}"),
     file_refit = "on_change"
   )
   
-  str_c("fits/bernoulli_", type)
+  glue("fits/bernoulli_{type}")
   
 }
 
 fit_stan <- function(model, stan_data, file_name, variational = FALSE, checkpoint = FALSE){
   
-  print(str_c("Total voters in this data: ", as.character(stan_data$N_voters)))
+  print(glue("Total voters in this data: {stan_data$N_voters}"))
   
   if (variational) {
-    m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = FALSE)
+    m <- cmdstan_model(glue("R/{file_name}.stan"), compile = FALSE)
     m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = TRUE)
 
     stan_data$threaded = 1
@@ -48,17 +47,20 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE, checkpoin
     fit <- m$pathfinder(
       data = stan_data,
       seed = 02139,
+      # num_paths = 2,
       num_threads = 20
     )
 
-    path <- str_c("fits/", file_name, "_numV", as.character(stan_data$N_voters), "_var.rds")
+    path <- glue("fits/{file_name}_numV{stan_data$N_voters}_var.rds")
+
+    fit$save_object(path)
   } else {
-    path <- str_c("fits/", file_name, "_numV", as.character(stan_data$N_voters), "_full.rds")
+    path <- glue("fits/{file_name}_numV{stan_data$N_voters}_full.rds")
 
     if (checkpoint) {
 
       fit = chkpt_stan(
-        model_code = readLines(str_c("R/", file_name, ".stan")),
+        model_code = readLines(glue("R/{file_name}.stan")),
         data = stan_data,
         iter_warmup = 1000,
         iter_sampling = 1000,
@@ -74,7 +76,7 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE, checkpoin
       write_rds(draws, path)
 
     } else {
-      m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = FALSE)
+      m <- cmdstan_model(glue("R/{file_name}.stan"), compile = FALSE)
       m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = FALSE)
 
       fit <- m$sample(
@@ -86,9 +88,9 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE, checkpoin
         parallel_chains = 4,
         threads_per_chain = 20
       )
-    }
 
-    fit$save_object(path)
+      fit$save_object(path)
+    }
   }
   
   return(path)
