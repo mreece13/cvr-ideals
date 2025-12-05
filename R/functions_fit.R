@@ -37,7 +37,7 @@ fit_bernoulli <- function(data, type){
 
 fit_stan <- function(model, stan_data, file_name, variational = FALSE){
   
-  print(str_c("Total voters in this data: ", as.character(stan_data$J)))
+  print(str_c("Total voters in this data: ", as.character(stan_data$N_voters)))
   
   if (variational){
     m <- cmdstan_model(str_c("R/", file_name, ".stan"), compile = FALSE)
@@ -51,7 +51,7 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE){
       num_threads = 5
     )
     
-    path <- str_c("fits/", file_name, "_numV", as.character(stan_data$J), "_var.rds")
+    path <- str_c("fits/", file_name, "_numV", as.character(stan_data$N_voters), "_var.rds")
     
   } 
   else {
@@ -68,7 +68,7 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE){
       threads_per_chain = 20
     )
     
-    path <- str_c("fits/", file_name, "_numV", as.character(stan_data$J), "_full.rds")
+    path <- str_c("fits/", file_name, "_numV", as.character(stan_data$N_voters), "_full.rds")
   }
   
   fit$save_object(path)

@@ -13,7 +13,6 @@ tar_option_set(
   packages = c("tidyverse", "brms", "arrow", "tidybayes", "cmdstanr", "posterior"),
   memory = "transient",
   error = "null",
-  format = "auto",
   garbage_collection = TRUE
 )
 
