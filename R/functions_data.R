@@ -74,42 +74,42 @@ filter_byCounty <- function(data, county){
     anti_join(small_candidates, join_by(race, candidate))
 }
 
-get_stan_data <- function(data, dims=1){
-  
+get_stan_data <- function(data, dims = 1, parallelize = FALSE) {
   # Assign unique IDs to races and candidates
-  ids <- data |> 
-    filter(candidate != "undervote") |> 
-    count(race, candidate) |> 
-    arrange(race, desc(n)) |> 
-    group_by(race) |> 
-    mutate(candidate_id = 1:n(),
-           race_id = cur_group_id())
-  
+  ids <- data |>
+    filter(candidate != "undervote") |>
+    count(race, candidate) |>
+    arrange(race, desc(n)) |>
+    group_by(race) |>
+    mutate(candidate_id = 1:n(), race_id = cur_group_id())
+
   # Join back to the original data
-  df <- data |> 
-    filter(candidate != "undervote") |> 
+  df <- data |>
+    filter(candidate != "undervote") |>
     left_join(ids, join_by(race, candidate))
-  
+
   # Create the votes matrix
-  votes_matrix <- df |> 
-    select(county_name, cvr_id, race_id, candidate_id, n) |> 
+  votes_matrix <- df |>
+    select(county_name, cvr_id, race_id, candidate_id, n) |>
     arrange(race_id, desc(n)) |>
-    select(-n) |> 
-    pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |> 
-    select(-cvr_id, -county_name) |> 
+    select(-n) |>
+    pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |>
+    select(-cvr_id, -county_name) |>
     as.matrix()
-  
+
   # Prepare data for Stan
   stan_data <- list(
     N_voters = distinct(df, county_name, cvr_id) |> tally() |> pull(),
     N_contests = n_distinct(ids$race),
     N_cands = length(ids$candidate),
     votes = votes_matrix,
-    sizes = distinct(df, race, race_id, candidate) |> count(race_id) |> pull(n)
+    sizes = distinct(df, race, race_id, candidate) |> count(race_id) |> pull(n),
+    parallelize = as.numeric(parallelize)
   )
 
-  if (dims > 1)stan_data$N_dims = dims
-  
+  if (dims > 1) {
+    stan_data$N_dims = dims
+  }
+
   return(stan_data)
-  
 }
