@@ -35,7 +35,7 @@ fit_bernoulli <- function(data, type){
   
 }
 
-fit_stan <- function(model, stan_data, file_name, variational = FALSE, checkpoint = TRUE){
+fit_stan <- function(model, stan_data, file_name, variational = FALSE, checkpoint = FALSE){
   
   print(str_c("Total voters in this data: ", as.character(stan_data$N_voters)))
   

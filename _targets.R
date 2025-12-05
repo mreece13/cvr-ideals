@@ -10,7 +10,7 @@ options("brms.backend" = "cmdstanr")
 options("future" = FALSE)
 
 tar_option_set(
-  packages = c("tidyverse", "brms", "arrow", "tidybayes", "cmdstanr", "posterior", "chkptstanr"),
+  packages = c("tidyverse", "brms", "arrow", "tidybayes", "cmdstanr", "posterior"),
   memory = "transient",
   error = "null",
   garbage_collection = TRUE
