@@ -5,11 +5,12 @@
 ## @param st -- the full name of the state to extract, or "all" to get all of them
 ## @param partisan -- should the data to be filtered to partisan races only?
 ## @param num -- how many voters should be sampled? If left blank, selects everyone
-get_data <- function(path, st, partisan_only = FALSE, num = 1e9){
+get_data <- function(path, st, partisan_only = FALSE, num = 1e9, compare){
   
   # define only the variables I need to run the analysis, to limit the size of the loaded data
   partial_schema <- schema(
     field("state", string()),
+    field("precinct", string()),
     field("cvr_id", string()),
     field("county_name", string()),
     field("candidate", string()),
@@ -20,19 +21,31 @@ get_data <- function(path, st, partisan_only = FALSE, num = 1e9){
   )
   
   base_data <- open_dataset(path, partitioning = c("state", "county_name"), schema = partial_schema, format = "parquet") |>
-    filter(state == st, magnitude == 1, !is.na(office), !is.na(district), candidate != "undervote", candidate != "overvote", candidate != "writein") |>
+    filter(state == st, magnitude == 1, !is.na(office), !str_detect(candidate, regex("undervote|overvote|writein", TRUE))) |>
+    semi_join(compare, join_by(state, county_name)) |>
     select(-magnitude) |>
-    mutate(race = str_c(office, district, sep = "_"))
+    mutate(
+      race = paste(office, district, sep = "_")
+    )
+  
+  # pick random precincts to get good coverage
+  random_precincts <- base_data |> 
+    distinct(state, county_name, precinct) |> 
+    collect() |> 
+    slice_sample(prop = 0.1, by = county_name)
 
   # pick some random people
   randoms <- base_data |>
-    distinct(state, county_name, cvr_id) |>
+    inner_join(random_precincts, join_by(state, county_name, precinct)) |>
+    distinct(state, county_name, precinct, cvr_id) |>
     collect() |> 
-    slice_sample(n=num)
+    slice_sample(n=500, by = c(county_name, precinct)) |> 
+    distinct(state, county_name, cvr_id)
   
   # What are the contested races?
   small_candidates <- base_data |> 
     inner_join(randoms, join_by(state, county_name, cvr_id)) |>
+    # inner_join(random_precincts, join_by(state, county_name, precinct)) |>
     count(race, candidate) |> 
     filter(n <= 10) |> 
     distinct(race, candidate)
@@ -48,7 +61,7 @@ get_data <- function(path, st, partisan_only = FALSE, num = 1e9){
     # What are the partisan races in the data?
     partisan_races <- base_data |> 
       distinct(race, party) |>
-      filter(party != "nonpartisan") |> 
+      filter(!str_detect(party, regex("nonpartisan", TRUE))) |> 
       distinct(race)
     
     contested_races <- inner_join(contested_races, partisan_races)
@@ -56,9 +69,9 @@ get_data <- function(path, st, partisan_only = FALSE, num = 1e9){
   
   base_data |> 
     inner_join(randoms, join_by(state, county_name, cvr_id)) |>
+    # inner_join(random_precincts, join_by(state, county_name, precinct)) |>
     inner_join(contested_races, join_by(race)) |> 
-    filter(!is.na(party)) |> 
-    mutate(choice_rep = as.numeric(party == "republican")) |> 
+    # mutate(choice_rep = as.numeric(party == "republican" | party == "REPUBLICAN")) |> 
     collect()
 }
 
@@ -77,19 +90,15 @@ filter_byCounty <- function(data, county){
 get_stan_data <- function(data, dims = 1, parallelize = FALSE) {
   # Assign unique IDs to races and candidates
   ids <- data |>
-    filter(candidate != "undervote") |>
     count(race, candidate) |>
     arrange(race, desc(n)) |>
-    group_by(race) |>
-    mutate(candidate_id = 1:n(), race_id = cur_group_id())
+    mutate(candidate_id = 1:n(), race_id = cur_group_id(), .by = race)
 
   # Join back to the original data
-  df <- data |>
-    filter(candidate != "undervote") |>
-    left_join(ids, join_by(race, candidate))
+  data <- left_join(data, ids, join_by(race, candidate))
 
   # Create the votes matrix
-  votes_matrix <- df |>
+  votes_matrix <- data |>
     select(county_name, cvr_id, race_id, candidate_id, n) |>
     arrange(race_id, desc(n)) |>
     select(-n) |>
@@ -99,11 +108,11 @@ get_stan_data <- function(data, dims = 1, parallelize = FALSE) {
 
   # Prepare data for Stan
   stan_data <- list(
-    N_voters = distinct(df, county_name, cvr_id) |> tally() |> pull(),
+    N_voters = distinct(data, county_name, cvr_id) |> nrow(),
     N_contests = n_distinct(ids$race),
     N_cands = length(ids$candidate),
     votes = votes_matrix,
-    sizes = distinct(df, race, race_id, candidate) |> count(race_id) |> pull(n),
+    sizes = distinct(data, race, race_id, candidate) |> count(race_id) |> pull(n),
     parallelize = as.numeric(parallelize)
   )
 
