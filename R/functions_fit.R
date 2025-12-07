@@ -34,6 +34,18 @@ fit_bernoulli <- function(data, type){
   
 }
 
+# to enable GPU support on slurm, I did (roughly) the following:
+# mamba install clinfo ocl-icd-system
+# module load cuda
+# cat $LD_LIBRARY_PATH
+# path_to_opencl_lib <- $LD_LIBRARY_PATH
+# cpp_options = list(
+#   paste0("LDFLAGS+= -L\"",path_to_opencl_lib,"\" -lOpenCL")
+# )
+
+# cmdstanr::cmdstan_make_local(cpp_options = cpp_options)
+# cmdstanr::rebuild_cmdstan()
+
 fit_stan <- function(model, stan_data, file_name, variational = FALSE, gpu = FALSE){
   
   print(glue("Total voters in this data: {stan_data$N_voters}"))
@@ -55,7 +67,7 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE, gpu = FAL
     path <- glue("fits/{file_name}_numV{stan_data$N_voters}_full.rds")
 
     m <- cmdstan_model(glue("R/{file_name}.stan"), compile = FALSE)
-    m$compile(cpp_options = list(stan_threads = !gpu, stan_opencl = gpu))
+    m$compile(cpp_options = list(stan_threads = TRUE, stan_opencl = gpu))
 
     fit <- m$sample(
       data = stan_data,
