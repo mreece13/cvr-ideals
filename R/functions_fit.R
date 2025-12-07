@@ -34,20 +34,17 @@ fit_bernoulli <- function(data, type){
   
 }
 
-fit_stan <- function(model, stan_data, file_name, variational = FALSE, checkpoint = FALSE){
+fit_stan <- function(model, stan_data, file_name, variational = FALSE, gpu = FALSE){
   
   print(glue("Total voters in this data: {stan_data$N_voters}"))
   
   if (variational) {
     m <- cmdstan_model(glue("R/{file_name}.stan"), compile = FALSE)
-    m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = TRUE)
-
-    stan_data$threaded = 1
+    m$compile(cpp_options = list(stan_threads = TRUE, stan_opencl = gpu))
 
     fit <- m$pathfinder(
       data = stan_data,
       seed = 02139,
-      # num_paths = 2,
       num_threads = 20
     )
 
@@ -57,40 +54,20 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE, checkpoin
   } else {
     path <- glue("fits/{file_name}_numV{stan_data$N_voters}_full.rds")
 
-    if (checkpoint) {
+    m <- cmdstan_model(glue("R/{file_name}.stan"), compile = FALSE)
+    m$compile(cpp_options = list(stan_threads = TRUE, stan_opencl = gpu))
 
-      fit = chkpt_stan(
-        model_code = readLines(glue("R/{file_name}.stan")),
-        data = stan_data,
-        iter_warmup = 1000,
-        iter_sampling = 1000,
-        iter_per_chkpt = 100,
-        path = "checkpoints",
-        parallel_chains = 4,
-        threads_per = 20,
-        seed = 02139
-      )
+    fit <- m$sample(
+      data = stan_data,
+      chains = 4,
+      iter_warmup = 1000,
+      iter_sampling = 1000,
+      seed = 02139,
+      parallel_chains = 4,
+      threads_per_chain = if (gpu) 1 else 20
+    )
 
-      draws = combine_chkpt_draws(fit)
-
-      write_rds(draws, path)
-
-    } else {
-      m <- cmdstan_model(glue("R/{file_name}.stan"), compile = FALSE)
-      m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = FALSE)
-
-      fit <- m$sample(
-        data = stan_data,
-        chains = 4,
-        iter_warmup = 1000,
-        iter_sampling = 1000,
-        seed = 02139,
-        parallel_chains = 4,
-        threads_per_chain = 20
-      )
-
-      fit$save_object(path)
-    }
+    fit$save_object(path)
   }
   
   return(path)

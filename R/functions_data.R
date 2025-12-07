@@ -87,34 +87,94 @@ filter_byCounty <- function(data, county){
     anti_join(small_candidates, join_by(race, candidate))
 }
 
-get_stan_data <- function(data, dims = 1, parallelize = FALSE) {
-  # Assign unique IDs to races and candidates
-  ids <- data |>
-    count(race, candidate) |>
-    arrange(race, desc(n)) |>
-    mutate(candidate_id = 1:n(), race_id = cur_group_id(), .by = race)
+get_stan_data <- function(data, dims = 1, parallelize = FALSE, ragged = FALSE) {
+  
+  if (ragged) {
+    # For ragged format: Democrats get ID=1 (first/reference), others get sequential IDs
+    # This ensures Democrat is always the reference category in categorical_logit
+    ids <- data |>
+      distinct(race, candidate, party) |>
+      mutate(
+        party = ifelse(str_detect(race, "^prop_"), NA, party)
+      ) |> 
+      distinct(race, candidate, party) |> 
+      slice_head(n=1, by = c(race, candidate)) |> 
+      arrange(race, party != "democrat", candidate) |>  # Democrats first within each race
+      mutate(
+        candidate_id = row_number(),  # Sequential IDs with Democrat=1
+        race_id = cur_group_id(),
+        .by = race
+      ) |> 
+      select(-party)
+    
+    # Create voter ID mapping
+    voter_map <- data |>
+      distinct(county_name, cvr_id) |>
+      arrange(county_name, cvr_id) |>
+      mutate(voter_id = row_number())
+    
+    # Create ragged arrays organized by contest
+    votes_long <- data |>
+      left_join(ids, join_by(race, candidate)) |> 
+      left_join(voter_map, join_by(county_name, cvr_id)) |>
+      select(voter_id, race_id, candidate_id) |>
+      arrange(race_id, voter_id)  # Sort by contest, then voter
+    
+    # Count votes per contest
+    n_votes_per_contest <- votes_long |>
+      count(race_id) |>
+      arrange(race_id) |>
+      pull(n)
+    
+    # Prepare data for Stan (ragged format)
+    stan_data <- list(
+      N_voters = nrow(voter_map),
+      N_contests = n_distinct(ids$race),
+      N_cands = length(ids$candidate),
+      N_votes = nrow(votes_long),  # Total number of actual votes
+      n_votes_per_contest = n_votes_per_contest,
+      voter_id = votes_long$voter_id,  # Flat array of voter IDs
+      vote = votes_long$candidate_id,   # Flat array of candidate choices
+      sizes = distinct(ids, race, race_id, candidate) |> count(race_id) |> pull(n)
+    )
+  } else {
+    # For dense format: Democrats get ID=1 (first/reference), others get sequential IDs
+    # Same as ragged format, just different storage structure
+    # 0 is used to indicate "didn't vote in this race"
+    ids <- data |>
+      distinct(race, candidate, party) |>
+      mutate(
+        party = ifelse(str_detect(race, "^prop_"), NA, party)
+      ) |> 
+      distinct(race, candidate, party) |> 
+      slice_head(n=1, by = c(race, candidate)) |> 
+      arrange(race, party != "democrat", candidate) |>  # Democrats first within each race
+      mutate(
+        candidate_id = row_number(),  # Sequential IDs with Democrat=1
+        race_id = cur_group_id(),
+        .by = race
+      ) |> 
+      select(-party)
+    
+    # Create the dense votes matrix
+    votes_matrix <- data |>
+      left_join(ids, join_by(race, candidate)) |> 
+      select(county_name, cvr_id, race_id, candidate_id) |>
+      arrange(race_id, candidate_id) |>
+      pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |>
+      select(-cvr_id, -county_name) |>
+      as.matrix()
 
-  # Join back to the original data
-  data <- left_join(data, ids, join_by(race, candidate))
-
-  # Create the votes matrix
-  votes_matrix <- data |>
-    select(county_name, cvr_id, race_id, candidate_id, n) |>
-    arrange(race_id, desc(n)) |>
-    select(-n) |>
-    pivot_wider(names_from = race_id, values_from = candidate_id, values_fill = 0) |>
-    select(-cvr_id, -county_name) |>
-    as.matrix()
-
-  # Prepare data for Stan
-  stan_data <- list(
-    N_voters = distinct(data, county_name, cvr_id) |> nrow(),
-    N_contests = n_distinct(ids$race),
-    N_cands = length(ids$candidate),
-    votes = votes_matrix,
-    sizes = distinct(data, race, race_id, candidate) |> count(race_id) |> pull(n),
-    parallelize = as.numeric(parallelize)
-  )
+    # Prepare data for Stan (dense format)
+    stan_data <- list(
+      N_voters = distinct(data, county_name, cvr_id) |> nrow(),
+      N_contests = n_distinct(ids$race),
+      N_cands = length(ids$candidate),
+      votes = votes_matrix,
+      sizes = distinct(ids, race, race_id, candidate) |> count(race_id) |> pull(n),
+      parallelize = as.numeric(parallelize)
+    )
+  }
 
   if (dims > 1) {
     stan_data$N_dims = dims
