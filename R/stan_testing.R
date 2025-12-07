@@ -9,84 +9,50 @@ library(posterior)
 
 source("../medsl_theme.R")
 
-data <- targets::tar_read(data_adams)
-stan_data = targets::tar_read(stan_data_adams)
-# stan_data$N_dims <- 2
+data <- targets::tar_read(data) |> 
+  mutate(
+    pres_choice = first(candidate[office == "us president"]),
+    .by = c(state, county_name, cvr_id)
+  )
 
-m <- cmdstan_model("R/cat_2pl_gpu.stan", compile = FALSE)
-m$compile(cpp_options = list(stan_threads = TRUE), force_recompile = FALSE)
-m$compile(cpp_options = list(stan_opencl = TRUE), force_recompile = FALSE)
-
-fit <- m$sample(
-  data = stan_data,
-  chains = 2,
-  iter_warmup = 500,
-  iter_sampling = 100,
-  # threads_per_chain = 2
-)
-
-# fit <- m$pathfinder(
-#   data = stan_data,
-#   seed = 02139,
-#   num_threads = 5
-# )
-
-fit$save_object("fits/cat_2pl_gpu.rds")
-
-fit <- read_rds("fits/cat_2pl_streamlined.rds")
+stan_data = targets::tar_read(stan_data)
+fit <- read_rds("fits/cat_2pl_numV118109_var.rds")
 
 ## graphing
 
-pres_choices <- df |>
-  filter(office == "US PRESIDENT") |>
-  distinct(county_name, cvr_id, candidate) |> 
-  mutate(candidate = str_squish(candidate)) |> 
-  mutate(candidate = case_match(
-    candidate,
-    "JOSEPH KISHORE NORISSA SANTA CRUZ" ~ "JOSEPH KISHORE",
-    "JORDAN CANCER SCOTT JENNIFER TEPOOL" ~ "JORDAN SCOTT",
-    "BILL HAMMONS ERIC BODENSTAB" ~ "BILL HAMMONS",
-    "MARK CHARLES ADRIAN WALLACE" ~ "MARK CHARLES",
-    "PRINCESS KHADIJAH MARYAM JACOB FAMBRO KHADIJAH MARYAM JACOB SR" ~ "PRINCESS KHADIJAH JACOB-FAMBRO",
-    "KYLE KENLEY KOPITKE NATHAN RE VO SORENSON" ~ "KYLE KENLEY",
-    "JOE MC HUGH ELIZABETH STORM" ~ "JOE MCHUGH",
-    "BLAKE HUBER FRANK ATWOOD" ~ "BLAKE HUBER",
-    "PHIL COLLINS BILLY JOE PARKER" ~ "PHIL COLLINS",
-    .default = candidate
-  ))
-
-voters <- df |> 
-  select(county_name, cvr_id, race_id, candidate_id) |> 
-  arrange(race_id, candidate_id) |> 
-  distinct(county_name, cvr_id) |> 
-  mutate(id = 1:n()) |> 
-  left_join(pres_choices)
-
-joined <- fit |> 
+vars <- fit |>
+  as_draws_df() |>
+  summarise_draws() |>
+  filter(mean > 0.1 | mean < -0.1, !str_detect(variable, "raw")) |>
+  slice_sample(n = 24) |>
+  pull(variable)
+  
+trace_3 <- fit |> 
   as_draws_df() |> 
-  slice_head(n=1) |> 
+  mcmc_trace(pars = vars)
+
+joined <- as_draws_df(fit) |> 
+  # slice_head(n=1) |> 
   select(starts_with("alpha")) |> 
   pivot_longer(cols = everything(), names_to = "variable", values_to = "alpha") |> 
-  mutate(id = str_extract(variable, "\\d+") |> as.numeric()) |>
-  mutate(alpha = alpha/sd(alpha)) |> 
-  left_join(voters, join_by(id)) |> 
-  drop_na(candidate)
-
-# joined <- fit |> 
-#   spread_draws(alpha[id], ndraws = 1) |> 
-#   ungroup() |> 
-#   mutate(alpha = alpha/sd(alpha)) |> 
-#   left_join(voters, join_by(id)) |> 
-#   drop_na(candidate) 
+  mutate(id = str_extract(variable, "\\d+") |> as.integer()) |> 
+  left_join(
+    distinct(data, county_name, precinct, cvr_id, pres_choice) |> 
+      mutate(id = row_number()) |> select(county_name, id, pres_choice),
+    by = "id"
+  ) |> 
+  select(county_name, alpha, pres_choice)
 
 p_agg_main <- joined |> 
-  filter(candidate %in% c("JOSEPH R BIDEN", "DONALD J TRUMP")) |> 
-  # mutate(alpha = alpha*-1) |> 
-  ggplot(aes(x = alpha, fill = candidate, y = candidate)) +
-  ggridges::geom_density_ridges(scale = 1, panel_scaling = FALSE) +
+  # slice_head(n=100000) |> 
+  filter(pres_choice %in% c("joseph r biden", "donald j trump")) |> 
+  ggplot(aes(x = alpha, y = pres_choice, fill = pres_choice)) +
+  ggdist::stat_slab() +
   scale_fill_discrete(type = c("#F6573E", "#3791FF"), guide = "none") +
   labs(x = expression(alpha), y = "", fill = "Candidate") +
-  theme_medsl()
+  theme_minimal()
+
+ggsave("figs/var_preschoices.jpg", plot = p_agg_main, width = 8, height = 6, units = "in")
 
 p_agg_others <- joined |> 
   filter(!(candidate %in% c("JOSEPH R BIDEN", "DONALD J TRUMP"))) |> 
@@ -113,20 +79,32 @@ sds <- fit |>
 params <- fit |> 
   posterior::as_draws_df() |> 
   slice_head(n=1) |> 
-  select(starts_with("beta["), starts_with("gamma[")) |> 
-  sweep(1, sds, "*") |> 
+  select(starts_with("diff["), starts_with("disc[")) |> 
+  # sweep(1, sds, "*") |> 
   pivot_longer(cols = everything()) |> 
   bind_cols(bind_rows(ids, ids)) |> 
   mutate(name = str_remove(name, "\\[.*?$")) |> 
   select(name, race, candidate, value)
 
-targets::tar_read(stan_data)
-
 p <- params |> 
-  filter(str_detect(race, "US PRESIDENT")) |> 
+  filter(str_detect(race, "us president")) |> 
   ggplot(aes(x = value, y = candidate)) +
   geom_point() +
   facet_wrap(~ name) +
-  theme_bw()
+  theme_bw(base_size=5)
 
 ggsave("figs/params_var.jpeg", plot = p, width = 8, height = 8, units = "in")
+
+## #
+
+mod <- cmdstan_model("R/irt_gpu.stan", compile = TRUE)
+mod$compile(cpp_options = list(stan_opencl = FALSE), force_recompile = TRUE)
+
+fit <- mod$sample(
+  data = tar_read(stan_data_adams),
+  chains = 2,
+  iter_warmup = 100,
+  iter_sampling = 100,
+  seed = 02139,
+  parallel_chains = 2
+)
