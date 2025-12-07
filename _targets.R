@@ -41,7 +41,7 @@ list(
   tar_target(fit_cat2pl_adams, fit_stan(stan_2pl, stan_data_adams, "cat_2pl"), format = "file"),
   tar_target(fit_cat2pl_var_adams, fit_stan(stan_2pl, stan_data_adams, "cat_2pl", variational = TRUE), format = "file"),
   tar_target(fit_cat2pl_var, fit_stan(stan_2pl, stan_data, "cat_2pl", variational = TRUE), format = "file"),
-  tar_target(fit_gpu_adams = fit_stan(stan_gpu, stan_data_adams, "irt_gpu", gpu = TRUE), format = "file")
+  tar_target(fit_gpu_adams, fit_stan(stan_gpu, stan_data_adams, "irt_gpu", gpu = TRUE), format = "file")
   # plots
   # tar_target(p_ber_ideals, plot_ber_ideals(fit_bin_1pl, fit_bin_2pl)),
   # tar_target(p_ber_params, plot_ber_params(fit_bin_2pl)),
