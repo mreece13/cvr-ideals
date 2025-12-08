@@ -36,11 +36,11 @@ list(
   # tar_target(fit_bin_1pl, fit_bernoulli(data_partisan, type = "1pl"), format = "file"),
   # tar_target(fit_bin_2pl, fit_bernoulli(data_partisan, type = "2pl"), format = "file"),
   # fit stan models
-  tar_target(stan_2pl, "R/cat_2pl.stan", format = "file"),
+  # tar_target(stan_2pl, "R/cat_2pl.stan", format = "file"),
   tar_target(stan_gpu, "R/irt_gpu.stan", format = "file"),
-  tar_target(fit_cat2pl_adams, fit_stan(stan_2pl, stan_data_adams, "cat_2pl"), format = "file"),
-  tar_target(fit_cat2pl_var_adams, fit_stan(stan_2pl, stan_data_adams, "cat_2pl", variational = TRUE), format = "file"),
-  tar_target(fit_cat2pl_var, fit_stan(stan_2pl, stan_data, "cat_2pl", variational = TRUE), format = "file"),
+  # tar_target(fit_cat2pl_adams, fit_stan(stan_gpu, stan_data_adams, "irt_gpu"), format = "file"),
+  tar_target(fit_cat2pl_var_adams, fit_stan(stan_2pl, stan_data_adams, "irt_gpu", variational = TRUE), format = "file"),
+  # tar_target(fit_cat2pl_var, fit_stan(stan_2pl, stan_data, "irt_gpu", variational = TRUE), format = "file"),
   tar_target(fit_gpu_adams, fit_stan(stan_gpu, stan_data_adams, "irt_gpu", gpu = TRUE), format = "file")
   # plots
   # tar_target(p_ber_ideals, plot_ber_ideals(fit_bin_1pl, fit_bin_2pl)),

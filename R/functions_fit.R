@@ -46,41 +46,40 @@ fit_bernoulli <- function(data, type){
 # cmdstanr::cmdstan_make_local(cpp_options = cpp_options)
 # cmdstanr::rebuild_cmdstan()
 
-fit_stan <- function(model, stan_data, file_name, variational = FALSE, gpu = FALSE){
-  
+fit_stan <- function(model, stan_data, file_name, variational = FALSE, gpu = FALSE) {
   print(glue("Total voters in this data: {stan_data$N_voters}"))
-  
+
+  m <- cmdstan_model(glue("R/{file_name}.stan"), compile = FALSE)
+  m$compile(cpp_options = list(stan_threads = TRUE, stan_opencl = gpu))
+
+  fit_pathfinder <- m$pathfinder(
+    data = stan_data,
+    seed = 02139,
+    num_threads = 20
+  )
+
+  path <- glue("fits/{file_name}_numV{stan_data$N_voters}_var.rds")
+
+  fit_pathfinder$save_object(path)
+
   if (variational) {
-    m <- cmdstan_model(glue("R/{file_name}.stan"), compile = FALSE)
-    m$compile(cpp_options = list(stan_threads = TRUE, stan_opencl = gpu))
-
-    fit <- m$pathfinder(
-      data = stan_data,
-      seed = 02139,
-      num_threads = 20
-    )
-
-    path <- glue("fits/{file_name}_numV{stan_data$N_voters}_var.rds")
-
-    fit$save_object(path)
-  } else {
-    path <- glue("fits/{file_name}_numV{stan_data$N_voters}_full.rds")
-
-    m <- cmdstan_model(glue("R/{file_name}.stan"), compile = FALSE)
-    m$compile(cpp_options = list(stan_threads = TRUE, stan_opencl = gpu))
-
-    fit <- m$sample(
-      data = stan_data,
-      chains = 4,
-      iter_warmup = 1000,
-      iter_sampling = 1000,
-      seed = 02139,
-      parallel_chains = 4,
-      threads_per_chain = if (gpu) 1 else 20
-    )
-
-    fit$save_object(path)
+    return(path)
   }
-  
+
+  path <- glue("fits/{file_name}_numV{stan_data$N_voters}_full.rds")
+
+  fit_mcmc <- m$sample(
+    data = stan_data,
+    chains = 4,
+    iter_warmup = 1000,
+    iter_sampling = 1000,
+    seed = 02139,
+    parallel_chains = 4,
+    threads_per_chain = if (gpu) 1 else 20,
+    init = fit_pathfinder
+  )
+
+  fit_mcmc$save_object(path)
+
   return(path)
 }
