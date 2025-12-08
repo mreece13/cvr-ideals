@@ -55,7 +55,8 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE, gpu = FAL
   fit_pathfinder <- m$pathfinder(
     data = stan_data,
     seed = 02139,
-    num_threads = 20
+    num_threads = 20,
+    psis_resample = FALSE
   )
 
   path <- glue("fits/{file_name}_numV{stan_data$N_voters}_var.rds")
