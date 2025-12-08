@@ -16,8 +16,9 @@ parameters {
   vector[N_voters] alpha; // latent ability of voter j - mean latent ability
   vector[N_cands] diff_raw;  // difficulty for each race
   vector[N_cands] disc_raw; // discrimination for each race
-  real<lower=0> sigma_diff; // scale of difficulties
-  real<lower=0> sigma_disc; // scale of log discrimination
+  // Keep scales strictly positive to avoid OpenCL numerical issues
+  real<lower=1e-6> sigma_diff; // scale of difficulties
+  real<lower=1e-6> sigma_disc; // scale of log discrimination
 }
 
 transformed parameters {
@@ -58,10 +59,11 @@ model {
       // move on to the next race if we don't use this one for whatever reason
       if (s == 0){
         pos_votes += n_v;  // Still need to advance vote position
+        pos_target += s;   // keep parameter pointer in sync
         continue;
       }
       
-      // set hierarchical priors
+      // set hierarchical priors (safe because s > 0)
       segment(diff_raw, pos_target, s) ~ normal(0, sigma_diff);
       segment(disc_raw, pos_target, s) ~ normal(0, sigma_disc);
       
