@@ -41,7 +41,11 @@ list(
   # tar_target(fit_cat2pl_adams, fit_stan(stan_gpu, stan_data_adams, "irt_gpu"), format = "file"),
   # tar_target(fit_cat2pl_var_adams, fit_stan(stan_2pl, stan_data_adams, "irt_gpu", variational = TRUE), format = "file"),
   # tar_target(fit_cat2pl_var, fit_stan(stan_2pl, stan_data, "irt_gpu", variational = TRUE), format = "file"),
-  tar_target(fit_gpu_adams, fit_stan(stan_gpu, stan_data_adams, "irt_gpu", gpu = TRUE), format = "file")
+  tar_target(fit_gpu_adams, fit_stan(stan_gpu, stan_data_adams, "irt_gpu", gpu = TRUE), format = "file"),
+  # contest sample (national, ~50k voters, state-prefixed races)
+  tar_target(data_contest_sample, get_data_contest_sample("../cvr-ml/data/combined_contestSample.parquet"), format = "parquet"),
+  tar_target(stan_data_contest_sample, get_stan_data(data_contest_sample, ragged = TRUE)),
+  tar_target(fit_contest_sample, fit_stan(stan_gpu, stan_data_contest_sample, "irt_gpu", gpu = TRUE), format = "file")
   # plots
   # tar_target(p_ber_ideals, plot_ber_ideals(fit_bin_1pl, fit_bin_2pl)),
   # tar_target(p_ber_params, plot_ber_params(fit_bin_2pl)),

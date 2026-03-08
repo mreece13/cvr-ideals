@@ -75,6 +75,17 @@ get_data <- function(path, st, partisan_only = FALSE, num = 1e9, compare){
     collect()
 }
 
+get_data_contest_sample <- function(path) {
+  data <- read_parquet(path)
+
+  # Ensure party column exists (absent from data files created before party was added)
+  if (!"party" %in% names(data)) {
+    data <- mutate(data, party = NA_character_)
+  }
+
+  data
+}
+
 filter_byCounty <- function(data, county){
   small_candidates <- data |>
     filter(county_name == county) |> 
@@ -95,7 +106,7 @@ get_stan_data <- function(data, dims = 1, parallelize = FALSE, ragged = FALSE) {
     ids <- data |>
       distinct(race, candidate, party) |>
       mutate(
-        party = ifelse(str_detect(race, "^prop_"), NA, party)
+        party = ifelse(str_detect(race, "^prop_|_prop_"), NA, party)
       ) |> 
       distinct(race, candidate, party) |> 
       slice_head(n=1, by = c(race, candidate)) |> 
