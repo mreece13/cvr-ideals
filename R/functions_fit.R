@@ -77,8 +77,7 @@ fit_stan <- function(model, stan_data, file_name, variational = FALSE, gpu = FAL
     seed = 02139,
     parallel_chains = 4,
     threads_per_chain = if (gpu) 1 else 20,
-    init = fit_pathfinder,
-    output_dir = glue("fits/{file_name}_numV{stan_data$N_voters}_chains/")
+    init = fit_pathfinder
   )
 
   fit_mcmc$save_object(path)
